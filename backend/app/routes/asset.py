@@ -10,7 +10,7 @@ from app.routes.auth import get_current_user
 
 router = APIRouter(prefix="/assets", tags=["资产管理"])
 
-@router.get("/", response_model=AssetListResponse)
+@router.get("", response_model=AssetListResponse)
 def get_assets(
     skip: int = Query(0, ge=0, description="跳过的记录数"),
     limit: int = Query(10, ge=1, le=10, description="每页记录数"),
@@ -53,7 +53,8 @@ def get_asset(
     
     return asset
 
-@router.post("/", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
+#创建新增资产
+@router.post("", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
 def create_asset(
     asset_data: AssetCreate,
     db: Session = Depends(get_db),

@@ -5,7 +5,7 @@ from .user import UserResponse
 # 导出所有模式
 from .user import (
     UserBase, UserCreate, UserLogin, UserResponse, 
-    UserUpdate, UserInDB, Token, TokenData, UserRole,UserListResponse
+    UserUpdate, UserInDB, Token, TokenData, UserRole,UserListResponse,UserLoginResponse,UserLoginResponseBase
 )
 
 from .asset import (
@@ -23,7 +23,7 @@ class AssetWithOwnerResponse(AssetWithOwnerResponseOriginal):
 __all__ = [
     # User schemas
     'UserBase', 'UserCreate', 'UserLogin', 'UserResponse',
-    'UserUpdate', 'UserInDB', 'Token', 'TokenData', 'UserRole',"UserListResponse"
+    'UserUpdate', 'UserInDB', 'Token', 'TokenData', 'UserRole',"UserListResponse","UserLoginResponse","UserLoginResponseBase",
     
     # Asset schemas
     'AssetBase', 'AssetCreate', 'AssetResponse', 

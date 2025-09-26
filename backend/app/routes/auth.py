@@ -77,7 +77,7 @@ async def register_user(user: schemas.UserCreate, db: Session = Depends(get_db))
     return db_user
 
 #json入口
-@router.post("/login")
+@router.post("/login",response_model=schemas.UserLoginResponse)
 async def login_user(user: schemas.UserLogin, db: Session = Depends(get_db)):
     """
     用户登录接口
@@ -103,14 +103,30 @@ async def login_user(user: schemas.UserLogin, db: Session = Depends(get_db)):
         # 3. 生成JWT令牌
         access_token = create_access_token(data={"sub":str(db_user.id)})
         
+
         # 4. 返回令牌
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "role":db_user.role,
-            "user_id": db_user.id,
-            "username": db_user.username
-        }
+        userloginresponse=schemas.UserLoginResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=schemas.UserLoginResponseBase(
+                id=db_user.id,
+                role=db_user.role,
+                username=db_user.username,
+                email=db_user.email
+            )
+        )
+
+        return userloginresponse
+        # return {
+        #     "access_token": access_token,
+        #     "token_type": "bearer",
+        #     "user":{
+        #         "user_id": db_user.id,
+        #         "role":db_user.role,
+        #         "username": db_user.username,
+        #         "email": db_user.email
+        #     }
+        # }
         
     except HTTPException:
         raise

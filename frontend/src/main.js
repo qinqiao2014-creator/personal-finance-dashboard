@@ -1,4 +1,3 @@
-
 // import { createApp } from "vue";
 // import App from "./App.vue";
 // import router from "./router"; // 导入路由配置
@@ -16,6 +15,7 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import ElementPlus from "element-plus";
 import "element-plus/dist/index.css";
+import zhCn from "element-plus/dist/locale/zh-cn.mjs"; // 引入中文语言包
 import App from "./App.vue";
 import router from "./router";
 
@@ -23,6 +23,6 @@ const app = createApp(App);
 const pinia = createPinia();
 
 app.use(pinia);
-app.use(ElementPlus);
+app.use(ElementPlus, { locale: zhCn }); // 配置为中文);
 app.use(router);
 app.mount("#app");

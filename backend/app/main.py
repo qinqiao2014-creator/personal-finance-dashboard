@@ -12,7 +12,11 @@ app = FastAPI(title="个人资产管理系统API", version="0.1.0")
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # 前端地址
+    allow_origins=["http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                    "https://pc.tail4461b.ts.net",
+                    "https://100.80.154.12:8000", 
+                    ],  # 前端地址
     allow_credentials=True,
     allow_methods=["*"],  # 允许所有HTTP方法
     allow_headers=["*"],  # 允许所有头

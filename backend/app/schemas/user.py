@@ -51,6 +51,20 @@ class UserResponse(UserBase):
     class Config:
         from_attributes = True  # 允许从ORM对象转换
 
+#用户登录响应(登录时返回给前端的数据)
+class UserLoginResponseBase(BaseModel):
+    id: int
+    role:UserRole
+    username: str
+    email: str
+class UserLoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user:UserLoginResponseBase
+
+    class Config:
+        from_attributes = True  # 允许从ORM对象转换    
+
 # 用户更新请求
 class UserUpdate(BaseModel):
     username: Optional[str] = Field(None, min_length=3, max_length=50, example="new_username")

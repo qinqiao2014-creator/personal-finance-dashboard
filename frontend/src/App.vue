@@ -1,14 +1,20 @@
 <template>
   <div id="app">
-    <!-- 路由出口：这里会显示当前路由对应的页面 -->
-    <router-view></router-view>
+    <router-view />
   </div>
 </template>
 
-<script>
-export default {
-  name: "App",
-};
+<script setup>
+import { onMounted } from "vue";
+import { useAuthStore } from "@/stores/auth";
+
+const authStore = useAuthStore();
+
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    authStore.checkAuth();
+  }
+});
 </script>
 
 <style>
