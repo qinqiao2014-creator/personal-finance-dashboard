@@ -1,59 +1,37 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-import logging
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from .. import schemas, models
-from ..database import get_db 
-from ..auth import hash_password ,verify_password  # 导入哈希工具
+from jose import jwt, JWTError
 from datetime import datetime, timedelta
-from jose import jwt
-from fastapi.security import OAuth2PasswordBearer,OAuth2PasswordRequestForm
-from jose import JWTError
+import logging
 
-
-
-# JWT配置 - 需要添加到您的配置中
-SECRET_KEY = "dev-secret-key-change-before-production"  # 开发环境使用，生产前请更改
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# 使用绝对导入
+from app.database import get_db
+from app.models import User
+from app.schemas import user as user_schemas
+from app.auth.security import hash_password, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 
 # 设置日志记录器
 logger = logging.getLogger(__name__)
 
-#创建JWT访问令牌
-def create_access_token(data: dict):
-    """
-    创建JWT访问令牌
-    """
-    try:
-        to_encode = data.copy()
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        to_encode.update({"exp": expire})
-        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        return encoded_jwt
-    except Exception as e:
-        logger.error(f"JWT令牌生成失败: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="令牌生成失败"
-        )
-
-
+# OAuth2方案配置
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 # 创建一个路由管理器，所有路径都会自动加前缀 `/auth`
 router = APIRouter(prefix="/auth", tags=["认证接口"])
 
-@router.post("/register", response_model=schemas.UserResponse)
-async def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@router.post("/register", response_model=user_schemas.UserResponse)
+async def register_user(user: user_schemas.UserCreate, db: Session = Depends(get_db)):
     """
     用户注册接口
     """
     # 1. 检查用户名是否已存在
-    db_user = db.query(models.User).filter(models.User.username == user.username).first()
+    db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户名已被注册")
     
     # 2. 检查邮箱是否已存在
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+    db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱已被注册")
     
@@ -61,7 +39,7 @@ async def register_user(user: schemas.UserCreate, db: Session = Depends(get_db))
     hashed_password_str = hash_password(user.password)
     
     # 4. 创建新用户
-    db_user = models.User(
+    db_user = User(
         username=user.username,
         email=user.email,
         hashed_password=hashed_password_str,
@@ -76,21 +54,19 @@ async def register_user(user: schemas.UserCreate, db: Session = Depends(get_db))
     # 6. 返回创建的用户信息（不包含密码）
     return db_user
 
-#json入口
-@router.post("/login",response_model=schemas.UserLoginResponse)
-async def login_user(user: schemas.UserLogin, db: Session = Depends(get_db)):
+@router.post("/login", response_model=user_schemas.UserLoginResponse)
+async def login_user(user: user_schemas.UserLogin, db: Session = Depends(get_db)):
     """
     用户登录接口
     """
     try:
         # 1. 查找用户
-        db_user = db.query(models.User).filter(
-            models.User.username == user.username).first()
+        db_user = db.query(User).filter(User.username == user.username).first()
         
         if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="用户名或密码错误"  # 模糊提示增强安全性
+                detail="用户名或密码错误"
             )
         
         # 2. 验证密码
@@ -101,14 +77,13 @@ async def login_user(user: schemas.UserLogin, db: Session = Depends(get_db)):
             )
         
         # 3. 生成JWT令牌
-        access_token = create_access_token(data={"sub":str(db_user.id)})
+        access_token = create_access_token(data={"sub": str(db_user.id)})
         
-
         # 4. 返回令牌
-        userloginresponse=schemas.UserLoginResponse(
+        userloginresponse = user_schemas.UserLoginResponse(
             access_token=access_token,
             token_type="bearer",
-            user=schemas.UserLoginResponseBase(
+            user=user_schemas.UserLoginResponseBase(
                 id=db_user.id,
                 role=db_user.role,
                 username=db_user.username,
@@ -117,16 +92,6 @@ async def login_user(user: schemas.UserLogin, db: Session = Depends(get_db)):
         )
 
         return userloginresponse
-        # return {
-        #     "access_token": access_token,
-        #     "token_type": "bearer",
-        #     "user":{
-        #         "user_id": db_user.id,
-        #         "role":db_user.role,
-        #         "username": db_user.username,
-        #         "email": db_user.email
-        #     }
-        # }
         
     except HTTPException:
         raise
@@ -137,16 +102,12 @@ async def login_user(user: schemas.UserLogin, db: Session = Depends(get_db)):
             detail="系统内部错误，请稍后重试"
         )
 
-#表单token
-@router.post("/token",response_model=schemas.Token)
-async def login_for_swagger(form_data: OAuth2PasswordRequestForm = Depends(),db: Session = Depends(get_db)):
+@router.post("/token", response_model=user_schemas.Token)
+async def login_for_swagger(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     专门为Swagger UI的Authorize按钮提供的登录端点
     """
-    # 复用现有的登录逻辑，但使用表单数据
-    db_user = db.query(models.User).filter(
-        models.User.username == form_data.username
-    ).first()
+    db_user = db.query(User).filter(User.username == form_data.username).first()
     
     if not db_user or not verify_password(form_data.password, db_user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
@@ -157,9 +118,6 @@ async def login_for_swagger(form_data: OAuth2PasswordRequestForm = Depends(),db:
         "access_token": access_token,
         "token_type": "bearer"
     }
-
-# OAuth2方案配置
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """
@@ -181,9 +139,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     
     # 从数据库获取用户信息
-    user = db.query(models.User).filter(models.User.id == int(user_id)).first()
+    user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
     
     return user
-
