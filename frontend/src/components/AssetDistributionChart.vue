@@ -74,15 +74,19 @@ export default {
           // 解析格式: "equity.stock (股票)" -> name: "股票", code: "equity.stock"
           const match = key.match(/(.+) \((.+)\)/);
           if (match) {
+            const categoryCode = match[1];
+            const categoryName = match[2];
+
             processedData.push({
               value: value,
-              name: match[2], // 分类名称
-              code: match[1], // 分类代码
-              level: getCategoryLevel(match[1]),
-              parentCode: getParentCategoryCode(match[1]),
-              itemStyle: { color: getCategoryColor(match[1]) },
+              name: categoryName,
+              code: categoryCode,
+              level: getCategoryLevel(categoryCode),
+              parentCode: getParentCategoryCode(categoryCode),
+              itemStyle: { color: getCategoryColor(categoryCode) },
             });
           } else {
+            // 如果没有括号格式，直接使用
             processedData.push({
               value: value,
               name: key,
@@ -104,45 +108,45 @@ export default {
       }
     };
 
-    // 获取分类层级
+    // 获取分类层级 - 修复后的逻辑
     const getCategoryLevel = (categoryCode) => {
       const parts = categoryCode.split(".");
-      return parts.length;
+      if (parts.length === 1) return 1; // equity, fixed_income 等
+      if (parts.length === 2) return 2; // equity.stock, equity.fund 等
+      if (parts.length === 3) return 3; // equity.stock.us, equity.stock.cn_a 等
+      return 1;
     };
 
-    // 获取父级分类代码
+    // 获取父级分类代码 - 修复后的逻辑
     const getParentCategoryCode = (categoryCode) => {
       const parts = categoryCode.split(".");
-      return parts.length > 1 ? parts[0] : null;
+      if (parts.length === 1) return null; // 一级分类没有父级
+      if (parts.length === 2) return parts[0]; // equity.stock -> equity
+      if (parts.length === 3) return parts[0] + "." + parts[1]; // equity.stock.us -> equity.stock
+      return null;
     };
 
-    // 一级分类映射
+    // 一级分类颜色映射
     const level1Categories = {
-      cash: { name: "现金类", color: "#5470c6" },
-      bank: { name: "银行存款", color: "#91cc75" },
-      equity: { name: "权益类", color: "#fac858" },
-      bond: { name: "固收类", color: "#ee6666" },
-      fund: { name: "基金", color: "#73c0de" },
-      real_estate: { name: "房地产", color: "#3ba272" },
-      insurance: { name: "保险", color: "#fc8452" },
-      other: { name: "其他", color: "#9a60b4" },
-      alternative: { name: "另类投资", color: "#ff6b6b" },
-      fixed_income: { name: "固收类", color: "#4ecdc4" },
+      equity: { name: "权益类", color: "#5470c6" },
+      fixed_income: { name: "固定收益类", color: "#91cc75" },
+      cash: { name: "现金类", color: "#fac858" },
+      insurance: { name: "保险类", color: "#ee6666" },
+      physical: { name: "实物资产", color: "#73c0de" },
+      alternative: { name: "另类投资", color: "#3ba272" },
     };
 
     const getCategoryColor = (categoryCode) => {
       const colorMap = {
-        cash: "#5470c6",
-        bank: "#91cc75",
-        equity: "#fac858",
-        bond: "#ee6666",
-        fund: "#73c0de",
-        real_estate: "#3ba272",
-        insurance: "#fc8452",
-        other: "#9a60b4",
-        alternative: "#ff6b6b",
-        fixed_income: "#4ecdc4",
+        equity: "#5470c6",
+        fixed_income: "#91cc75",
+        cash: "#fac858",
+        insurance: "#ee6666",
+        physical: "#73c0de",
+        alternative: "#3ba272",
       };
+
+      // 获取一级分类代码
       const mainCategory = categoryCode.split(".")[0];
       return colorMap[mainCategory] || "#c0c0c0";
     };
@@ -153,38 +157,96 @@ export default {
       applyLevelFilter(level);
     };
 
-    // 应用层级过滤
-    const applyLevelFilter = (level) => {
-      if (level === 1) {
-        // 聚合到一级分类
+    // 应用层级过滤 - 修复后的逻辑
+    const applyLevelFilter = (targetLevel) => {
+      if (targetLevel === 1) {
+        // 一级视图：聚合到一级分类
         const level1Data = {};
 
         rawData.value.forEach((item) => {
-          const parentCode = item.parentCode || item.code;
-          const level1Info = level1Categories[parentCode] || {
-            name: parentCode,
-            color: getCategoryColor(parentCode),
+          // 找到该分类对应的一级分类代码
+          const level1Code = item.code.split(".")[0];
+          const level1Info = level1Categories[level1Code] || {
+            name: level1Code,
+            color: getCategoryColor(level1Code),
           };
 
-          if (!level1Data[parentCode]) {
-            level1Data[parentCode] = {
+          if (!level1Data[level1Code]) {
+            level1Data[level1Code] = {
               value: 0,
               name: level1Info.name,
-              code: parentCode,
+              code: level1Code,
               level: 1,
               itemStyle: { color: level1Info.color },
             };
           }
-          level1Data[parentCode].value += item.value;
+          level1Data[level1Code].value += item.value;
         });
 
         chartData.value = Object.values(level1Data);
       } else {
-        // 显示二级分类
-        chartData.value = rawData.value;
+        // 二级视图：显示二级分类，聚合三级分类数据
+        const level2Data = {};
+
+        rawData.value.forEach((item) => {
+          let targetCode, targetName;
+
+          if (item.level === 1) {
+            // 一级分类在二级视图中不显示
+            return;
+          } else if (item.level === 2) {
+            // 二级分类直接使用
+            targetCode = item.code;
+            targetName = item.name;
+          } else if (item.level === 3) {
+            // 三级分类聚合到对应的二级分类
+            targetCode = item.parentCode;
+            targetName = getCategoryDisplayName(targetCode);
+          }
+
+          if (targetCode && targetName) {
+            if (!level2Data[targetCode]) {
+              level2Data[targetCode] = {
+                value: 0,
+                name: targetName,
+                code: targetCode,
+                level: 2,
+                itemStyle: { color: getCategoryColor(targetCode) },
+              };
+            }
+            level2Data[targetCode].value += item.value;
+          }
+        });
+
+        chartData.value = Object.values(level2Data);
       }
 
       updateChartOption();
+    };
+
+    // 获取分类显示名称
+    const getCategoryDisplayName = (categoryCode) => {
+      const nameMap = {
+        "equity.stock": "股票",
+        "equity.fund": "基金",
+        "equity.derivatives": "衍生品",
+        "fixed_income.bond": "债券",
+        "fixed_income.deposit": "银行存款",
+        "fixed_income.wealth_mgmt": "银行理财",
+        "fixed_income.national_debt": "国债",
+        "insurance.life": "保险",
+        "insurance.health": "健康保险",
+        "insurance.property": "财产保险",
+        "physical.real_estate": "房地产",
+        "physical.gold": "黄金",
+        "physical.collectibles": "收藏品",
+        "alternative.crypto": "加密货币",
+        "alternative.private_equity": "私募股权",
+        "alternative.other": "其他",
+        "cash.savings": "活期存款",
+        "cash.money_fund": "货币基金",
+      };
+      return nameMap[categoryCode] || categoryCode;
     };
 
     const updateChartOption = () => {
