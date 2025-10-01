@@ -4,15 +4,15 @@ from app.database import get_db
 from app.models import AssetCategory
 
 router = APIRouter(prefix="/categories", tags=["分类管理"])
-
+# categories.py - 修正分类树构建逻辑
 @router.get("/asset-categories")
 async def get_asset_categories(db: Session = Depends(get_db)):
-    """获取资产分类数据（用于前端选择器）"""
+    """获取资产分类数据（支持常用分类和完整树形结构）"""
     
     # 获取所有分类
-    all_categories = db.query(AssetCategory).all()
+    all_categories = db.query(AssetCategory).order_by(AssetCategory.sort_order).all()
     
-    # 构建分类树（按父子关系正确构建）
+    # 构建分类树
     def build_category_tree(categories, parent_id=None):
         tree = []
         for category in categories:
@@ -24,24 +24,24 @@ async def get_asset_categories(db: Session = Depends(get_db)):
                     "is_common": category.is_common,
                     "children": build_category_tree(categories, category.id)
                 }
-                # 只包含有子节点的分类，或者标记为常用的叶子节点
-                if node["children"] or category.is_common:
-                    tree.append(node)
+                tree.append(node)
         return tree
     
-    # 获取常用分类（二级分类中的常用项）
+    # 获取常用分类（标记为常用的所有分类，不限于二级）
     common_categories = [
         {
             "code": cat.code,
             "name": cat.name,
             "is_common": True
         }
-        for cat in all_categories if cat.is_common and cat.level == 2
+        for cat in all_categories if cat.is_common
     ]
+    
+    full_tree = build_category_tree(all_categories)
     
     return {
         "common_categories": common_categories,
-        "full_tree": build_category_tree(all_categories)
+        "full_tree": full_tree
     }
 
 @router.get("/asset-categories/flat")

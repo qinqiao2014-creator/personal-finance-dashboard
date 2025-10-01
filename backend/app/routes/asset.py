@@ -103,15 +103,16 @@ async def create_asset(
     if not category:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的资产分类: {asset_data.category_code}"
+            detail={"error": "INVALID_CATEGORY", "message": f"无效的资产分类: {asset_data.category_code}"}
         )
     
+    # 创建资产并绑定分类
     asset = Asset(
         name=asset_data.name,
         amount=asset_data.amount,
         description=asset_data.description,
         owner_id=current_user.id,
-        primary_category_id=category.id
+        primary_category_id=category.id  # 正确绑定分类ID
     )
     
     db.add(asset)
@@ -119,7 +120,7 @@ async def create_asset(
     db.refresh(asset)
     
     # 返回包含分类信息的响应
-    asset_data = {
+    return {
         "id": asset.id,
         "name": asset.name,
         "amount": asset.amount,
@@ -128,15 +129,8 @@ async def create_asset(
         "updated_at": asset.updated_at,
         "owner_id": asset.owner_id,
         "category_code": category.code,
-        "category_name": category.name,
-        "category": {
-            "code": category.code,
-            "name": category.name,
-            "level": category.level
-        }
+        "category_name": category.name
     }
-    
-    return asset_data
 
 @router.put("/{asset_id}", response_model=AssetResponse)
 async def update_asset(

@@ -19,21 +19,6 @@
         <div class="card-header">
           <span>资产列表</span>
           <div class="header-actions">
-            <el-select
-              v-model="filterType"
-              placeholder="按类型筛选"
-              clearable
-              @change="fetchAssets"
-            >
-              <el-option label="股票" value="stock" />
-              <el-option label="基金" value="fund" />
-              <el-option label="银行存款" value="bank" />
-              <el-option label="加密货币" value="crypto" />
-              <el-option label="保险" value="insurance" />
-              <el-option label="房地产" value="real_estate" />
-              <el-option label="其他" value="other" />
-            </el-select>
-
             <el-button :icon="Refresh" @click="fetchAssets" :loading="loading">
               刷新
             </el-button>
@@ -56,27 +41,39 @@
       <!-- 资产表格 -->
       <el-table v-else :data="assetsList" style="width: 100%">
         <el-table-column prop="name" label="资产名称" min-width="120" />
-        <el-table-column prop="type" label="类型" width="100">
+
+        <!-- 新的分类列 -->
+        <el-table-column label="分类" width="180">
           <template #default="{ row }">
-            <el-tag :type="getAssetTypeTag(row.type)">{{
-              getAssetTypeLabel(row.type)
-            }}</el-tag>
+            <div v-if="row.category_name">
+              <el-tag type="info" size="small">{{ row.category_name }}</el-tag>
+              <div class="category-path" v-if="row.category_code">
+                {{ row.category_code }}
+              </div>
+            </div>
+            <span v-else class="no-category">未分类</span>
           </template>
         </el-table-column>
+
         <el-table-column prop="amount" label="金额" width="120">
-          <template #default="{ row }">¥ {{ row.amount.toFixed(2) }}</template>
+          <template #default="{ row }"
+            >¥ {{ row.amount?.toFixed(2) || "0.00" }}</template
+          >
         </el-table-column>
+
         <el-table-column
           prop="description"
           label="描述"
           min-width="150"
           show-overflow-tooltip
         />
+
         <el-table-column prop="created_at" label="创建时间" width="180">
           <template #default="{ row }">{{
             formatDate(row.created_at)
           }}</template>
         </el-table-column>
+
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="editAsset(row)" :icon="Edit">
@@ -120,25 +117,35 @@
         :model="assetForm"
         :rules="assetRules"
         label-width="80px"
+        @submit.prevent
       >
         <el-form-item label="资产名称" prop="name">
           <el-input v-model="assetForm.name" placeholder="请输入资产名称" />
         </el-form-item>
 
-        <el-form-item label="资产类型" prop="type">
-          <el-select
-            v-model="assetForm.type"
-            placeholder="请选择资产类型"
-            style="width: 100%"
-          >
-            <el-option label="股票" value="stock" />
-            <el-option label="基金" value="fund" />
-            <el-option label="银行存款" value="bank" />
-            <el-option label="加密货币" value="crypto" />
-            <el-option label="保险" value="insurance" />
-            <el-option label="房地产" value="real_estate" />
-            <el-option label="其他" value="other" />
-          </el-select>
+        <!-- 重要变更：使用分类选择器替代类型选择 -->
+        <el-form-item
+          v-if="showCreateDialog"
+          label="资产分类"
+          prop="category_code"
+        >
+          <CategorySelector
+            :value="assetForm.category_code"
+            :categories-data="categoriesData"
+            @input="handleCategoryInput"
+            @change="handleCategoryChange"
+          />
+
+          <!-- 开发时的功能：调试信息 -->
+          <div style="margin-top: 8px; font-size: 12px; color: #666">
+            调试信息:
+            <span v-if="assetForm.category_code">
+              已选择: {{ assetForm.category_code }} ({{
+                getCategoryName(assetForm.category_code)
+              }})
+            </span>
+            <span v-else style="color: red">未选择分类</span>
+          </div>
         </el-form-item>
 
         <el-form-item label="金额" prop="amount">
@@ -176,7 +183,6 @@
     </el-dialog>
   </div>
 </template>
-
 <script setup>
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -187,10 +193,9 @@ import {
   Refresh,
   ArrowLeft,
 } from "@element-plus/icons-vue";
-import api from "@/services/api";
-
-import { useRouter } from "vue-router";
-const router = useRouter();
+import { assetAPI } from "@/services/asset";
+import { categoryAPI } from "@/services/categories";
+import CategorySelector from "@/components/CategorySelector.vue";
 
 // 响应式数据
 const loading = ref(false);
@@ -200,8 +205,11 @@ const isEditing = ref(false);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
-const filterType = ref("");
+const filterCategory = ref("");
 const assetFormRef = ref();
+
+// 分类数据
+const categoriesData = ref([]);
 
 // 资产列表数据
 const assetsList = ref([]);
@@ -210,51 +218,100 @@ const assetsList = ref([]);
 const assetForm = reactive({
   id: null,
   name: "",
-  type: "",
+  category_code: "",
   amount: null,
   description: "",
 });
 
+// 添加分类变化监听
+const onCategoryChange = (value) => {
+  console.log("分类选择器变化:", value);
+  console.log("当前 assetForm.category_code:", assetForm.category_code);
+  console.log("值类型:", typeof value);
+};
+
+// 获取分类名称
+const getCategoryName = (code) => {
+  const category = categoriesData.value.find((cat) => cat.code === code);
+  return category ? category.name : "未知分类";
+};
+
 // 表单验证规则
 const assetRules = {
   name: [
-    { required: true, message: "请输入资产名称", trigger: "blur" },
-    { min: 1, max: 100, message: "长度在 1 到 100 个字符", trigger: "blur" },
+    { required: true, message: "请输入资产名称", trigger: "change" },
+    { min: 1, max: 100, message: "长度在 1 到 100 个字符", trigger: "change" },
   ],
-  type: [{ required: true, message: "请选择资产类型", trigger: "change" }],
+  category_code: [
+    {
+      required: true,
+      message: "请选择资产分类",
+      trigger: "change",
+    },
+  ],
   amount: [
-    { required: true, message: "请输入金额", trigger: "blur" },
-    { type: "number", min: 0.01, message: "金额必须大于0", trigger: "blur" },
+    {
+      required: true,
+      message: "请输入金额",
+      trigger: "change",
+    },
+    {
+      type: "number",
+      min: 0.01,
+      message: "金额必须大于0",
+      trigger: "change",
+    },
   ],
 };
-
-// 资产类型标签映射
-const assetTypeLabels = {
-  stock: "股票",
-  fund: "基金",
-  bank: "银行存款",
-  crypto: "加密货币",
-  insurance: "保险",
-  real_estate: "房地产",
-  other: "其他",
-};
-
-const assetTypeTags = {
-  stock: "success",
-  fund: "warning",
-  bank: "primary",
-  crypto: "danger",
-  insurance: "info",
-  real_estate: "gray",
-  other: "primary",
-};
-
-// 方法定义
-const getAssetTypeLabel = (type) => assetTypeLabels[type] || type;
-const getAssetTypeTag = (type) => assetTypeTags[type] || "";
 
 const formatDate = (dateString) => {
+  if (!dateString) return "-";
   return new Date(dateString).toLocaleString("zh-CN");
+};
+
+// 加载分类数据
+const loadCategories = async () => {
+  try {
+    const response = await categoryAPI.getAssetCategories();
+    console.log("分类数据:", response.data);
+
+    const categoryData = response.data;
+
+    if (categoryData.full_tree && Array.isArray(categoryData.full_tree)) {
+      categoriesData.value = flattenCategoryTree(categoryData.full_tree);
+    } else {
+      categoriesData.value = categoryData.common_categories || [];
+    }
+
+    console.log("处理后的分类数据:", categoriesData.value);
+  } catch (error) {
+    console.error("加载分类数据失败:", error);
+    ElMessage.error("加载分类数据失败");
+    categoriesData.value = [];
+  }
+};
+
+// 将树形结构转换为扁平数组
+const flattenCategoryTree = (tree, parentCode = null, level = 1) => {
+  let result = [];
+
+  for (const node of tree) {
+    const category = {
+      code: node.code,
+      name: node.name,
+      level: level,
+      parent_code: parentCode,
+      is_common: node.is_common || false,
+    };
+    result.push(category);
+
+    if (node.children && Array.isArray(node.children)) {
+      const children = flattenCategoryTree(node.children, node.code, level + 1);
+      result = result.concat(children);
+    }
+  }
+
+  return result;
 };
 
 // 获取资产列表
@@ -266,13 +323,15 @@ const fetchAssets = async () => {
       limit: pageSize.value,
     };
 
-    if (filterType.value) {
-      params.type = filterType.value;
+    if (filterCategory.value) {
+      params.category_code = filterCategory.value;
     }
 
-    const response = await api.get("/assets", { params });
-    assetsList.value = response.data.items;
-    total.value = response.data.total;
+    const response = await assetAPI.getAssets(params);
+    console.log("资产列表响应:", response.data);
+
+    assetsList.value = response.data.items || [];
+    total.value = response.data.total || 0;
 
     ElMessage.success("数据加载成功");
   } catch (error) {
@@ -301,7 +360,7 @@ const editAsset = (asset) => {
   Object.assign(assetForm, {
     id: asset.id,
     name: asset.name,
-    type: asset.type,
+    category_code: asset.category_code,
     amount: asset.amount,
     description: asset.description || "",
   });
@@ -312,16 +371,14 @@ const editAsset = (asset) => {
 const deleteAsset = async (asset) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除资产"${asset.name}"吗？此操作不可恢复。`,
-      "删除确认",
+      `确定要删除资产 "${asset.name}" 吗？`,
+      "确认删除",
       {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
         type: "warning",
       }
     );
 
-    await api.delete(`/assets/${asset.id}`);
+    await assetAPI.deleteAsset(asset.id);
     ElMessage.success("资产删除成功");
     fetchAssets();
   } catch (error) {
@@ -332,31 +389,66 @@ const deleteAsset = async (asset) => {
   }
 };
 
-// 提交表单
-const submitAssetForm = async () => {
-  if (!assetFormRef.value) return;
-
-  const valid = await assetFormRef.value.validate().catch(() => false);
-  if (!valid) return;
+// 提交资产表单
+const submitAssetForm = async (event) => {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
 
   formLoading.value = true;
-
   try {
+    console.log("开始提交表单验证");
+
+    // 使用 Element Plus 的表单验证
+    await assetFormRef.value.validate();
+
+    console.log("表单验证通过，准备提交数据");
+
+    const formData = {
+      name: assetForm.name.trim(),
+      category_code: assetForm.category_code,
+      amount: parseFloat(assetForm.amount),
+      description: assetForm.description?.trim() || "",
+    };
+
+    console.log("提交的表单数据:", formData);
+
     if (isEditing.value) {
-      // 更新资产
-      await api.put(`/assets/${assetForm.id}`, assetForm);
+      await assetAPI.updateAsset(assetForm.id, formData);
       ElMessage.success("资产更新成功");
     } else {
-      // 创建资产
-      await api.post("/assets", assetForm);
+      await assetAPI.createAsset(formData);
       ElMessage.success("资产创建成功");
     }
 
     showCreateDialog.value = false;
     fetchAssets();
   } catch (error) {
-    console.error("操作失败:", error);
-    ElMessage.error(isEditing.value ? "更新失败" : "创建失败");
+    console.error("提交表单失败:", error);
+    console.error("错误详情:", JSON.stringify(error, null, 2));
+
+    // 专门处理 Element Plus 的表单验证错误
+    if (error && typeof error === "object") {
+      // 检查是否是表单验证错误
+      const fieldErrors = Object.keys(error);
+      if (fieldErrors.length > 0) {
+        const firstError = error[fieldErrors[0]];
+        if (Array.isArray(firstError) && firstError.length > 0) {
+          ElMessage.error(
+            `表单验证失败: ${firstError[0].message || "请检查输入"}`
+          );
+          return;
+        }
+      }
+    }
+
+    // 其他类型的错误
+    if (error.message) {
+      ElMessage.error(error.message);
+    } else {
+      ElMessage.error(isEditing.value ? "更新资产失败" : "创建资产失败");
+    }
   } finally {
     formLoading.value = false;
   }
@@ -364,19 +456,46 @@ const submitAssetForm = async () => {
 
 // 重置表单
 const resetForm = () => {
+  if (assetFormRef.value) {
+    assetFormRef.value.resetFields();
+  }
   isEditing.value = false;
-  assetFormRef.value?.resetFields();
   Object.assign(assetForm, {
     id: null,
     name: "",
-    type: "",
+    category_code: "",
     amount: null,
     description: "",
   });
 };
 
+// 分类选择器输入事件处理
+const handleCategoryInput = (value) => {
+  console.log("分类选择器输入:", value);
+  // 确保 value 是字符串，不是 Event 对象
+  if (typeof value === "string") {
+    assetForm.category_code = value;
+  } else if (value && value.target) {
+    // 如果是 Event 对象，从 target 获取值
+    assetForm.category_code = value.target.value;
+  }
+};
+
+// 分类选择器变化事件处理
+const handleCategoryChange = (value) => {
+  console.log("分类选择器变化:", value);
+  // 确保 value 是字符串，不是 Event 对象
+  if (typeof value === "string") {
+    assetForm.category_code = value;
+  } else if (value && value.target) {
+    // 如果是 Event 对象，从 target 获取值
+    assetForm.category_code = value.target.value;
+  }
+};
+
 // 生命周期
 onMounted(() => {
+  loadCategories();
   fetchAssets();
 });
 </script>
@@ -419,18 +538,23 @@ onMounted(() => {
 }
 
 .loading-container {
-  padding: 20px 0;
+  padding: 20px;
 }
 
 .pagination-container {
-  display: flex;
-  justify-content: center;
   margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #ebeef5;
+  display: flex;
+  justify-content: flex-end;
 }
 
-.assets-card {
-  margin-bottom: 20px;
+.category-path {
+  font-size: 0.8em;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.no-category {
+  color: #c0c4cc;
+  font-style: italic;
 }
 </style>
