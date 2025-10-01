@@ -6,7 +6,10 @@ from app.database import get_db
 from app.models import Asset, AssetCategory, User
 from app.auth import get_current_user
 from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse, AssetSummary
+from datetime import datetime, timedelta
+import random
 
+TREND_MOCK = False   # True=随机模拟  False=真实数据
 router = APIRouter(prefix="/assets", tags=["资产管理"])
 
 @router.get("", response_model=AssetListResponse)
@@ -248,3 +251,47 @@ async def get_assets_summary(
         assets_by_type=assets_by_category,  # 保持字段名兼容性
         asset_count=asset_count
     )
+
+
+@router.get("/chart/trend", response_model=List[dict])
+async def get_asset_trend(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if TREND_MOCK:
+        # ===== 随机模拟 =====
+        user_total = db.query(func.sum(Asset.amount)).filter(Asset.owner_id == current_user.id).scalar() or 100000
+        trend_data = []
+        base_date = datetime.now()
+        for i in range(days, -1, -1):
+            date = base_date - timedelta(days=i)
+            variation = (random.random() - 0.5) * 0.05
+            value = trend_data[-1]["value"] * (1 + variation) if trend_data else user_total
+            trend_data.append({"date": date.strftime("%Y-%m-%d"), "value": round(value, 2)})
+        return trend_data
+    else:
+        # ===== 真实数据（暂无就返回空）=====        
+        from_date = datetime.now() - timedelta(days=days)
+        print("🔍 查询起始日期:", from_date.date())
+
+        # 按日汇总总资产（已创建的资产）
+        real_data = (
+            db.query(
+                func.date(Asset.created_at).label("date"),
+                func.sum(Asset.amount).label("value")
+            )
+            .filter(
+                Asset.owner_id == current_user.id,
+                Asset.created_at >= from_date
+            )
+            .group_by(func.date(Asset.created_at))
+            .order_by(func.date(Asset.created_at))
+            .all()
+        )
+
+        print("🔍 查询结果条数:", len(real_data))
+        for d in real_data:
+            print(d.date, d.value)
+
+        return [{"date": str(d.date), "value": float(d.value)} for d in real_data]

@@ -13,4 +13,11 @@ export const assetAPI = {
   updateAsset: (id, assetData) => api.put(`/assets/${id}`, assetData),
   deleteAsset: (id) => api.delete(`/assets/${id}`),
   getAssetSummary: () => api.get("/assets/summary/total"),
+  getAssetTrend: (days = 30) =>
+    api.get("/assets/chart/trend", { params: { days } }),
 };
+
+// export const getAssetTrend = (days = 30) =>
+//   api.get("/assets/chart/trend", {
+//     params: { days }, // axios 会自动拼 ?days=30
+//   });

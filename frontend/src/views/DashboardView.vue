@@ -44,10 +44,40 @@
       </el-card>
     </div>
 
-    <!-- 分类统计图表 -->
+    <!-- 图表区域 -->
+    <div class="charts-grid">
+      <!-- 资产分布环形图 -->
+      <el-card class="chart-card">
+        <template #header>
+          <div class="chart-header">
+            <span>资产分类分布</span>
+            <el-button
+              type="primary"
+              link
+              @click="refreshChartData"
+              :loading="chartLoading"
+            >
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+          </div>
+        </template>
+        <AssetDistributionChart ref="distributionChart" />
+      </el-card>
+
+      <!-- 趋势分析折线图 -->
+      <el-card class="chart-card">
+        <template #header>
+          <span>资产趋势分析</span>
+        </template>
+        <AssetTrendChart />
+      </el-card>
+    </div>
+
+    <!-- 原有的分类统计进度条 -->
     <el-card class="chart-card">
       <template #header>
-        <span>资产分类分布</span>
+        <span>分类金额详情</span>
       </template>
       <div v-if="categoryStats.length > 0" class="chart-container">
         <div
@@ -82,14 +112,29 @@
         <el-button @click="logout">退出登录</el-button>
       </div>
     </el-card>
+
+    <!-- 实时数据刷新控制 -->
+    <div class="refresh-controls">
+      <el-checkbox v-model="autoRefresh" @change="toggleAutoRefresh">
+        自动刷新 (每30秒)
+      </el-checkbox>
+      <el-button @click="manualRefresh" :loading="refreshing" type="primary">
+        {{ refreshing ? "刷新中..." : "立即刷新" }}
+      </el-button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { assetAPI } from "@/services/asset";
 import { ElMessage } from "element-plus";
+import { Refresh } from "@element-plus/icons-vue";
+
+// 导入图表组件
+import AssetDistributionChart from "@/components/AssetDistributionChart.vue";
+import AssetTrendChart from "@/components/AssetTrendChart.vue";
 
 const authStore = useAuthStore();
 
@@ -99,9 +144,18 @@ const assetsCount = ref(0);
 const categoryCount = ref(0);
 const categoryStats = ref([]);
 const loading = ref(false);
+const chartLoading = ref(false);
+const refreshing = ref(false);
+const autoRefresh = ref(false);
+
+// 图表引用
+const distributionChart = ref(null);
 
 // 当前日期
 const currentDate = computed(() => new Date().toLocaleDateString("zh-CN"));
+
+// 自动刷新定时器
+let refreshInterval = null;
 
 // 计算分类百分比
 const getCategoryPercentage = (categoryAmount) => {
@@ -163,6 +217,44 @@ const fetchAssets = async () => {
     categoryCount.value = 0;
   } finally {
     loading.value = false;
+    refreshing.value = false;
+  }
+};
+
+// 刷新图表数据
+const refreshChartData = async () => {
+  chartLoading.value = true;
+  try {
+    await fetchAssets();
+    // 如果图表组件有刷新方法，可以调用
+    if (distributionChart.value && distributionChart.value.refreshData) {
+      await distributionChart.value.refreshData();
+    }
+    ElMessage.success("数据刷新成功");
+  } catch (error) {
+    ElMessage.error("刷新数据失败");
+  } finally {
+    chartLoading.value = false;
+  }
+};
+
+// 手动刷新
+const manualRefresh = () => {
+  refreshing.value = true;
+  refreshChartData();
+};
+
+// 自动刷新控制
+const toggleAutoRefresh = () => {
+  if (autoRefresh.value) {
+    refreshInterval = setInterval(() => {
+      refreshChartData();
+    }, 30000); // 30秒刷新
+  } else {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
   }
 };
 
@@ -174,6 +266,12 @@ const logout = () => {
 
 onMounted(() => {
   fetchAssets();
+});
+
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+  }
 });
 </script>
 
@@ -226,8 +324,22 @@ onMounted(() => {
   font-size: 0.9em;
 }
 
+/* 图表网格布局 */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
 .chart-card {
   margin-bottom: 20px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .chart-container {
@@ -260,5 +372,32 @@ onMounted(() => {
 .action-buttons {
   display: flex;
   gap: 10px;
+}
+
+.refresh-controls {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .refresh-controls {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
 }
 </style>
