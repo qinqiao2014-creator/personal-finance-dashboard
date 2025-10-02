@@ -57,7 +57,7 @@ export default {
     const chartOption = ref({});
     const chartData = ref([]);
     const loading = ref(true);
-    const currentLevel = ref(2); // 默认显示二级分类
+    const currentLevel = ref(1); // 默认显示一级分类
     const rawData = ref([]); // 存储原始数据
 
     const loadDistributionData = async () => {
