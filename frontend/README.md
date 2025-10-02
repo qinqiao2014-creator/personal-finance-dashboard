@@ -27,3 +27,16 @@ npm run dev
 ```sh
 npm run build
 ```
+
+美林时钟模块：script 脚本用于选择周期
+// ==================== 配置区域 - 只需修改这里 ====================
+const config = {
+// 当前经济阶段（四选一）：
+// 'recovery' - 复苏期 | 'overheat' - 过热期
+// 'stagflation' - 滞胀期 | 'recession' - 衰退期
+currentPhase: "recovery",
+
+// 是否启用闪烁效果
+pulseEnabled: true,
+};
+// ==================== 配置区域结束 ====================
