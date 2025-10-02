@@ -44,6 +44,19 @@
       </el-card>
     </div>
 
+    <!-- 快速操作 - 移到图表区域上方 -->
+    <el-card class="quick-actions">
+      <template #header>
+        <span>快速操作</span>
+      </template>
+      <div class="action-buttons">
+        <el-button type="primary" @click="$router.push('/assets')">
+          管理资产
+        </el-button>
+        <el-button @click="logout">退出登录</el-button>
+      </div>
+    </el-card>
+
     <!-- 图表区域 -->
     <div class="charts-grid">
       <!-- 资产分布环形图 -->
@@ -112,19 +125,6 @@
         </div>
       </div>
       <el-empty v-else description="暂无分类统计数据" />
-    </el-card>
-
-    <!-- 快速操作 -->
-    <el-card class="quick-actions">
-      <template #header>
-        <span>快速操作</span>
-      </template>
-      <div class="action-buttons">
-        <el-button type="primary" @click="$router.push('/assets')">
-          管理资产
-        </el-button>
-        <el-button @click="logout">退出登录</el-button>
-      </div>
     </el-card>
 
     <!-- 实时数据刷新控制 -->
@@ -339,6 +339,16 @@ onUnmounted(() => {
   font-size: 0.9em;
 }
 
+/* 快速操作样式 */
+.quick-actions {
+  margin-bottom: 20px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
 /* 图表网格布局 */
 .charts-grid {
   display: grid;
@@ -384,15 +394,6 @@ onUnmounted(() => {
   font-weight: bold;
 }
 
-.quick-actions {
-  margin-top: 20px;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 10px;
-}
-
 .refresh-controls {
   margin-top: 20px;
   padding: 15px;
@@ -417,6 +418,10 @@ onUnmounted(() => {
     flex-direction: column;
     gap: 10px;
     align-items: stretch;
+  }
+
+  .action-buttons {
+    flex-direction: column;
   }
 }
 </style>
