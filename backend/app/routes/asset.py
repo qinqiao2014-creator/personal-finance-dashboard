@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func,text
 from typing import List, Optional
 from app.database import get_db
 from app.models import Asset, AssetCategory, User
@@ -8,6 +8,7 @@ from app.auth import get_current_user
 from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse, AssetSummary
 from datetime import datetime, timedelta
 import random
+
 
 TREND_MOCK = False   # True=随机模拟  False=真实数据
 router = APIRouter(prefix="/assets", tags=["资产管理"])
@@ -252,7 +253,6 @@ async def get_assets_summary(
         asset_count=asset_count
     )
 
-
 @router.get("/chart/trend", response_model=List[dict])
 async def get_asset_trend(
     days: int = Query(30, ge=1, le=365),
@@ -271,27 +271,156 @@ async def get_asset_trend(
             trend_data.append({"date": date.strftime("%Y-%m-%d"), "value": round(value, 2)})
         return trend_data
     else:
-        # ===== 真实数据（暂无就返回空）=====        
+        # ===== 真实数据 - 数据库优化方案 =====
         from_date = datetime.now() - timedelta(days=days)
-        print("🔍 查询起始日期:", from_date.date())
+        print(f"🔍 查询 {days} 天趋势数据，起始日期: {from_date.date()}")
+        
+        try:
+            # 首选：SQL优化查询
+            return await get_trend_sql_optimized(db, current_user, from_date)
+        except Exception as e:
+            print(f"❌ SQL优化查询失败: {e}，使用回退方案")
+            # 备选：内存优化回退方案
+            return await get_trend_fallback(db, current_user, from_date, days)
 
-        # 按日汇总总资产（已创建的资产）
-        real_data = (
-            db.query(
-                func.date(Asset.created_at).label("date"),
-                func.sum(Asset.amount).label("value")
-            )
-            .filter(
-                Asset.owner_id == current_user.id,
-                Asset.created_at >= from_date
-            )
-            .group_by(func.date(Asset.created_at))
-            .order_by(func.date(Asset.created_at))
-            .all()
+async def get_trend_sql_optimized(db, current_user, from_date):
+    """SQL优化版本 - 首选方案"""
+    cumulative_query = text("""
+        WITH RECURSIVE date_series(date) AS (
+            SELECT date(:start_date)
+            UNION ALL
+            SELECT date(date, '+1 day')
+            FROM date_series
+            WHERE date < date('now')
         )
+        SELECT 
+            ds.date,
+            COALESCE((
+                SELECT SUM(amount) 
+                FROM assets 
+                WHERE owner_id = :user_id 
+                AND date(created_at) <= ds.date
+            ), 0) as cumulative_value
+        FROM date_series ds
+        ORDER BY ds.date
+    """)
+    
+    result = db.execute(cumulative_query, {
+        'user_id': current_user.id,
+        'start_date': from_date.date()
+    }).fetchall()
+    
+    trend_data = [{"date": str(row.date), "value": float(row.cumulative_value)} for row in result]
+    
+    print(f"📊 SQL优化生成 {len(trend_data)} 个数据点")
+    if trend_data:
+        print(f"📈 金额范围: {trend_data[0]['value']} -> {trend_data[-1]['value']}")
+    
+    return trend_data
 
-        print("🔍 查询结果条数:", len(real_data))
-        for d in real_data:
-            print(d.date, d.value)
+async def get_trend_fallback(db, current_user, from_date, days):
+    """内存优化回退方案 - 备选方案"""
+    # 只查询需要的字段，按日期排序
+    assets = db.query(
+        Asset.created_at, 
+        Asset.amount
+    ).filter(
+        Asset.owner_id == current_user.id
+    ).order_by(Asset.created_at).all()
+    
+    print(f"🔍 回退方案: 用户共有 {len(assets)} 条资产记录")
+    
+    trend_data = []
+    current_date = from_date.date()
+    end_date = datetime.now().date()
+    
+    # 使用指针优化，避免重复遍历
+    asset_index = 0
+    cumulative_total = 0.0
+    
+    while current_date <= end_date:
+        date_str = current_date.strftime("%Y-%m-%d")
+        
+        # 累加所有创建日期小于等于当前日期的资产
+        while asset_index < len(assets):
+            asset = assets[asset_index]
+            asset_date = asset.created_at.date()
+            
+            if asset_date <= current_date:
+                cumulative_total += asset.amount
+                asset_index += 1
+            else:
+                break
+        
+        trend_data.append({
+            "date": date_str,
+            "value": float(cumulative_total)
+        })
+        
+        current_date += timedelta(days=1)
+    
+    print(f"📊 回退方案生成 {len(trend_data)} 个数据点")
+    return trend_data
 
-        return [{"date": str(d.date), "value": float(d.value)} for d in real_data]
+
+# @router.get("/chart/trend", response_model=List[dict])
+# async def get_asset_trend(
+#     days: int = Query(30, ge=1, le=365),
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_user)
+# ):
+#     if TREND_MOCK:
+#         # ===== 随机模拟 =====
+#         user_total = db.query(func.sum(Asset.amount)).filter(Asset.owner_id == current_user.id).scalar() or 100000
+#         trend_data = []
+#         base_date = datetime.now()
+#         for i in range(days, -1, -1):
+#             date = base_date - timedelta(days=i)
+#             variation = (random.random() - 0.5) * 0.05
+#             value = trend_data[-1]["value"] * (1 + variation) if trend_data else user_total
+#             trend_data.append({"date": date.strftime("%Y-%m-%d"), "value": round(value, 2)})
+#         return trend_data
+#     else:
+#         # ===== 真实数据 - 简化但正确的累计逻辑 =====
+#         from_date = datetime.now() - timedelta(days=days)
+#         print("🔍 查询起始日期:", from_date.date())
+        
+#         # 方法1：直接计算每天的累计总额（更简单可靠）
+#         # 获取所有资产的创建日期和金额
+#         all_assets = db.query(
+#             Asset.created_at,
+#             Asset.amount
+#         ).filter(
+#             Asset.owner_id == current_user.id
+#         ).all()
+        
+#         print(f"🔍 用户共有 {len(all_assets)} 条资产记录")
+        
+#         # 构建日期范围内的累计数据
+#         trend_data = []
+#         current_date = from_date.date()
+#         end_date = datetime.now().date()
+        
+#         while current_date <= end_date:
+#             date_str = current_date.strftime("%Y-%m-%d")
+            
+#             # 计算到当前日期为止的总资产
+#             cumulative_total = 0.0
+#             for asset in all_assets:
+#                 asset_date = asset.created_at.date()
+#                 if asset_date <= current_date:
+#                     cumulative_total += asset.amount
+            
+#             trend_data.append({
+#                 "date": date_str,
+#                 "value": float(cumulative_total)
+#             })
+            
+#             current_date += timedelta(days=1)
+        
+#         print(f"📊 生成的趋势数据点: {len(trend_data)}")
+#         if trend_data:
+#             print(f"📈 数据范围: {trend_data[0]['date']} -> {trend_data[-1]['date']}")
+#             print(f"💰 金额范围: {trend_data[0]['value']} -> {trend_data[-1]['value']}")
+        
+#         return trend_data

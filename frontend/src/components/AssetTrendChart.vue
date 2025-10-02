@@ -38,12 +38,12 @@ export default {
   },
   setup() {
     const chartOption = ref({});
-    const selectedPeriod = ref("30");
+    const selectedPeriod = ref("7");
     const loading = ref(false);
 
     const loadTrendData = async () => {
       try {
-        console.log("📦 localStorage token:", localStorage.getItem("token")); // ✅ 看这行
+        //console.log("📦 localStorage token:", localStorage.getItem("token")); // ✅ 看这行
         loading.value = true;
         // 调用后端API获取真实数据
         const days = Math.max(
@@ -167,5 +167,36 @@ export default {
       loadTrendData,
     };
   },
+};
+
+const loadTrendData = async () => {
+  try {
+    console.log("📦 localStorage token:", localStorage.getItem("token"));
+    loading.value = true;
+    const days = Math.max(1, Math.min(365, Number(selectedPeriod.value) || 30));
+    const response = await assetAPI.getAssetTrend(days);
+    const trendData = response.data;
+
+    // 添加调试信息
+    console.log("📊 趋势数据:", trendData);
+    if (trendData.length > 0) {
+      console.log("📈 数据范围:", {
+        start: trendData[0].date,
+        end: trendData[trendData.length - 1].date,
+        startValue: trendData[0].value,
+        endValue: trendData[trendData.length - 1].value,
+      });
+    }
+
+    updateChartOption(trendData);
+  } catch (error) {
+    console.error("加载趋势数据失败:", error);
+    ElMessage.error("加载趋势数据失败");
+    // 使用模拟数据时也确保是累计逻辑
+    const mockData = generateMockTrendData(parseInt(selectedPeriod.value));
+    updateChartOption(mockData);
+  } finally {
+    loading.value = false;
+  }
 };
 </script>

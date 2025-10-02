@@ -44,114 +44,52 @@
       </el-card>
     </div>
 
-    <!-- 图表和快速操作区域 -->
-    <div class="charts-and-actions">
-      <!-- 图表区域 -->
-      <div class="charts-section">
-        <!-- 资产分布环形图 -->
-        <el-card class="chart-card">
-          <template #header>
-            <div class="chart-header">
-              <span>资产分类分布</span>
-              <el-button
-                type="primary"
-                link
-                @click="refreshChartData"
-                :loading="chartLoading"
-              >
-                <el-icon><Refresh /></el-icon>
-                刷新
-              </el-button>
-            </div>
-          </template>
-          <AssetDistributionChart ref="distributionChart" />
-        </el-card>
-
-        <!-- 趋势分析折线图 -->
-        <el-card class="chart-card">
-          <template #header>
-            <span>资产趋势分析</span>
-          </template>
-          <AssetTrendChart />
-        </el-card>
-      </div>
-
-      <!-- 快速操作侧边栏 -->
-      <div class="actions-section">
-        <el-card class="quick-actions">
-          <template #header>
-            <span>快速操作</span>
-          </template>
-          <div class="action-buttons">
+    <!-- 图表区域 -->
+    <div class="charts-grid">
+      <!-- 资产分布环形图 -->
+      <el-card class="chart-card">
+        <template #header>
+          <div class="chart-header">
+            <span>资产分类分布</span>
             <el-button
               type="primary"
-              @click="$router.push('/assets')"
-              size="large"
-            >
-              <el-icon><Collection /></el-icon>
-              管理资产
-            </el-button>
-            <el-button @click="$router.push('/assets?action=add')" size="large">
-              <el-icon><Plus /></el-icon>
-              新增资产
-            </el-button>
-            <el-button
+              link
               @click="refreshChartData"
-              size="large"
               :loading="chartLoading"
             >
               <el-icon><Refresh /></el-icon>
-              刷新数据
-            </el-button>
-            <el-button @click="logout" size="large" type="danger">
-              <el-icon><SwitchButton /></el-icon>
-              退出登录
+              刷新
             </el-button>
           </div>
+        </template>
+        <AssetDistributionChart ref="distributionChart" />
+      </el-card>
 
-          <!-- 实时数据刷新控制 -->
-          <div class="refresh-controls">
-            <el-checkbox v-model="autoRefresh" @change="toggleAutoRefresh">
-              自动刷新 (每30秒)
-            </el-checkbox>
-            <el-button
-              @click="manualRefresh"
-              :loading="refreshing"
-              type="primary"
-              size="small"
-            >
-              {{ refreshing ? "刷新中..." : "立即刷新" }}
-            </el-button>
-          </div>
-        </el-card>
-
-        <!-- 系统状态信息 -->
-        <el-card class="system-status">
-          <template #header>
-            <span>系统状态</span>
-          </template>
-          <div class="status-items">
-            <div class="status-item">
-              <span class="status-label">数据更新时间</span>
-              <span class="status-value">{{ lastUpdateTime }}</span>
-            </div>
-            <div class="status-item">
-              <span class="status-label">自动刷新</span>
-              <el-tag :type="autoRefresh ? 'success' : 'info'" size="small">
-                {{ autoRefresh ? "开启" : "关闭" }}
-              </el-tag>
-            </div>
-            <div class="status-item">
-              <span class="status-label">图表数据</span>
-              <el-tag type="success" size="small">正常</el-tag>
-            </div>
-          </div>
-        </el-card>
-      </div>
+      <!-- 趋势分析折线图 -->
+      <el-card class="chart-card">
+        <template #header>
+          <span>资产趋势分析</span>
+        </template>
+        <AssetTrendChart />
+      </el-card>
     </div>
 
-    <!-- 原有的分类统计进度条 -->
+    <!-- 美林投资时钟 -->
     <el-card class="chart-card full-width">
+      <template #header>
+        <span>美林投资时钟</span>
+        <el-tooltip
+          content="基于经济周期理论的资产配置参考工具"
+          placement="top"
+        >
+          <el-icon><InfoFilled /></el-icon>
+        </el-tooltip>
+      </template>
+      <MerrillClock />
+    </el-card>
+
+    <!-- 原有的分类统计进度条 -->
+    <el-card class="chart-card">
       <template #header>
         <span>分类金额详情</span>
       </template>
@@ -175,6 +113,29 @@
       </div>
       <el-empty v-else description="暂无分类统计数据" />
     </el-card>
+
+    <!-- 快速操作 -->
+    <el-card class="quick-actions">
+      <template #header>
+        <span>快速操作</span>
+      </template>
+      <div class="action-buttons">
+        <el-button type="primary" @click="$router.push('/assets')">
+          管理资产
+        </el-button>
+        <el-button @click="logout">退出登录</el-button>
+      </div>
+    </el-card>
+
+    <!-- 实时数据刷新控制 -->
+    <div class="refresh-controls">
+      <el-checkbox v-model="autoRefresh" @change="toggleAutoRefresh">
+        自动刷新 (每30秒)
+      </el-checkbox>
+      <el-button @click="manualRefresh" :loading="refreshing" type="primary">
+        {{ refreshing ? "刷新中..." : "立即刷新" }}
+      </el-button>
+    </div>
   </div>
 </template>
 
@@ -183,16 +144,12 @@ import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { assetAPI } from "@/services/asset";
 import { ElMessage } from "element-plus";
-import {
-  Refresh,
-  Collection,
-  Plus,
-  SwitchButton,
-} from "@element-plus/icons-vue";
+import { Refresh, InfoFilled } from "@element-plus/icons-vue";
 
 // 导入图表组件
 import AssetDistributionChart from "@/components/AssetDistributionChart.vue";
 import AssetTrendChart from "@/components/AssetTrendChart.vue";
+import MerrillClock from "@/components/MerrillClock.vue";
 
 const authStore = useAuthStore();
 
@@ -211,9 +168,6 @@ const distributionChart = ref(null);
 
 // 当前日期
 const currentDate = computed(() => new Date().toLocaleDateString("zh-CN"));
-
-// 最后更新时间
-const lastUpdateTime = computed(() => new Date().toLocaleTimeString("zh-CN"));
 
 // 自动刷新定时器
 let refreshInterval = null;
@@ -339,7 +293,7 @@ onUnmounted(() => {
 <style scoped>
 .dashboard-container {
   padding: 20px;
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -385,29 +339,16 @@ onUnmounted(() => {
   font-size: 0.9em;
 }
 
-/* 图表和操作区域布局 */
-.charts-and-actions {
+/* 图表网格布局 */
+.charts-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
   margin-bottom: 20px;
-  align-items: start;
-}
-
-.charts-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.actions-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 
 .chart-card {
-  margin-bottom: 0;
+  margin-bottom: 20px;
 }
 
 .chart-card.full-width {
@@ -443,24 +384,13 @@ onUnmounted(() => {
   font-weight: bold;
 }
 
-/* 快速操作样式 */
 .quick-actions {
-  height: fit-content;
+  margin-top: 20px;
 }
 
 .action-buttons {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.action-buttons .el-button {
-  justify-content: flex-start;
-  padding: 12px 16px;
-}
-
-.action-buttons .el-icon {
-  margin-right: 8px;
+  gap: 10px;
 }
 
 .refresh-controls {
@@ -469,62 +399,18 @@ onUnmounted(() => {
   background: #f5f7fa;
   border-radius: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* 系统状态样式 */
-.system-status {
-  height: fit-content;
-}
-
-.status-items {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.status-item {
-  display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.status-item:last-child {
-  border-bottom: none;
-}
-
-.status-label {
-  color: #606266;
-  font-size: 0.9em;
-}
-
-.status-value {
-  color: #303133;
-  font-weight: 500;
-  font-size: 0.9em;
 }
 
 /* 响应式设计 */
-@media (max-width: 1024px) {
-  .charts-and-actions {
+@media (max-width: 768px) {
+  .charts-grid {
     grid-template-columns: 1fr;
   }
 
-  .actions-section {
-    order: -1;
-  }
-}
-
-@media (max-width: 768px) {
   .stats-grid {
     grid-template-columns: 1fr;
-  }
-
-  .action-buttons {
-    flex-direction: column;
   }
 
   .refresh-controls {

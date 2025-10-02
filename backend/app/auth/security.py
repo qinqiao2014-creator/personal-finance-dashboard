@@ -10,7 +10,7 @@ if not hasattr(bcrypt_module, '__about__'):
 # JWT配置
 SECRET_KEY = "dev-secret-key-change-before-production"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 # 密码哈希配置
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

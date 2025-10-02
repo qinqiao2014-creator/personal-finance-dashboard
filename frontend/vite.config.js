@@ -14,7 +14,8 @@ export default defineConfig({
   },
   server: {
     allowedHosts: ["pc.tail4461b.ts.net"], // ← 允许 localtunnel 域名
-    host: "127.0.0.1", // ← 监听 127.0.0.1
+    // host: "127.0.0.1", // ← 监听 127.0.0.1
+    host: "0.0.0.0",
     port: 5173,
   },
 });
