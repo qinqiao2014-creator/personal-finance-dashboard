@@ -90,16 +90,58 @@
     <!-- 美林投资时钟 -->
     <el-card class="chart-card full-width">
       <template #header>
-        <span>美林投资时钟</span>
-        <el-tooltip
-          content="基于经济周期理论的资产配置参考工具"
-          placement="top"
-        >
-          <el-icon><InfoFilled /></el-icon>
-        </el-tooltip>
+        <div class="clock-header-with-diagnosis">
+          <span>美林投资时钟</span>
+          <div class="diagnosis-controls">
+            <!-- 初始状态：诊断按钮 -->
+            <el-button
+              v-if="!diagnosisResult"
+              type="primary"
+              @click="startDiagnosis"
+              :loading="diagnosing"
+              size="small"
+            >
+              <el-icon><Search /></el-icon>
+              诊断资产配置
+            </el-button>
+
+            <!-- 已有诊断：显示结果和重新诊断 -->
+            <div v-else class="diagnosis-brief">
+              <span class="health-badge"
+                >健康度: {{ diagnosisResult.health_score }}/100</span
+              >
+              <el-button @click="showDiagnosisDetail" size="small"
+                >查看详情</el-button
+              >
+              <el-button
+                @click="startDiagnosis"
+                :loading="diagnosing"
+                size="small"
+              >
+                重新诊断
+              </el-button>
+            </div>
+          </div>
+        </div>
       </template>
       <MerrillClock />
     </el-card>
+
+    <!-- 新增：诊断结果对话框 -->
+    <!-- 添加自定义类名diagnosis-dialog，可以在CSS控制窗口大小 -->
+    <el-dialog
+      v-model="showDiagnosisDialog"
+      class="diagnosis-dialog"
+      :title="diagnosisResult ? '资产配置诊断报告' : '资产配置诊断中...'"
+      width="800px"
+    >
+      <DiagnosisProcess
+        v-if="!diagnosisResult"
+        :current-step="currentStep"
+        :step-progress="stepProgress"
+      />
+      <DiagnosisReport v-else :report="diagnosisResult" />
+    </el-dialog>
 
     <!-- 原有的分类统计进度条 -->
     <el-card class="chart-card">
@@ -144,7 +186,9 @@ import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { assetAPI } from "@/services/asset";
 import { ElMessage } from "element-plus";
-import { Refresh, InfoFilled } from "@element-plus/icons-vue";
+import { Refresh, InfoFilled, Search } from "@element-plus/icons-vue"; // 添加Search图标
+import DiagnosisReport from "@/components/DiagnosisReport.vue"; // 新增导入
+import DiagnosisProcess from "@/components/DiagnosisProcess.vue";
 
 // 导入图表组件
 import AssetDistributionChart from "@/components/AssetDistributionChart.vue";
@@ -162,6 +206,13 @@ const loading = ref(false);
 const chartLoading = ref(false);
 const refreshing = ref(false);
 const autoRefresh = ref(false);
+// 现有响应式数据保持不变，新增：
+const diagnosisResult = ref(null);
+const diagnosing = ref(false);
+const showDiagnosisDialog = ref(false);
+// 新增：动画相关变量
+const currentStep = ref(1);
+const stepProgress = ref(0);
 
 // 图表引用
 const distributionChart = ref(null);
@@ -271,6 +322,66 @@ const toggleAutoRefresh = () => {
       refreshInterval = null;
     }
   }
+};
+
+// 开始诊断流程
+const startDiagnosis = async () => {
+  diagnosing.value = true;
+  showDiagnosisDialog.value = true; // 立即显示对话框展示动画
+  diagnosisResult.value = null; // 重置结果
+
+  try {
+    // 步骤1: 分析资产配置 (2秒)
+    currentStep.value = 1;
+    stepProgress.value = 0;
+    await runDiagnosisStep(2000);
+
+    // 步骤2: 匹配经济周期 (2秒)
+    currentStep.value = 2;
+    stepProgress.value = 0;
+    await runDiagnosisStep(1500);
+
+    // 步骤3: 生成报告 (1秒)
+    currentStep.value = 3;
+    stepProgress.value = 0;
+    await runDiagnosisStep(1000);
+
+    // 获取真实数据
+    const currentPhase = "recovery";
+    const response = await assetAPI.getAllocationAnalysis(currentPhase);
+    diagnosisResult.value = response.data;
+
+    ElMessage.success("资产配置诊断完成");
+  } catch (error) {
+    console.error("诊断失败:", error);
+    ElMessage.error("诊断失败，请重试");
+  } finally {
+    diagnosing.value = false;
+  }
+};
+
+// 新增：运行动画步骤的方法
+const runDiagnosisStep = (duration) => {
+  return new Promise((resolve) => {
+    const interval = 50;
+    const steps = duration / interval;
+    let currentStepProgress = 0;
+
+    const progressInterval = setInterval(() => {
+      currentStepProgress++;
+      stepProgress.value = Math.min((currentStepProgress / steps) * 100, 100);
+
+      if (currentStepProgress >= steps) {
+        clearInterval(progressInterval);
+        resolve();
+      }
+    }, interval);
+  });
+};
+
+// 添加缺失的方法
+const showDiagnosisDetail = () => {
+  showDiagnosisDialog.value = true;
 };
 
 // 退出登录
@@ -423,5 +534,41 @@ onUnmounted(() => {
   .action-buttons {
     flex-direction: column;
   }
+}
+
+/* 新增样式 */
+.clock-header-with-diagnosis {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.diagnosis-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.diagnosis-brief {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.health-badge {
+  padding: 4px 8px;
+  background: #f0f9ff;
+  border: 1px solid #409eff;
+  border-radius: 4px;
+  color: #409eff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 诊断对话框样式 */
+:deep(.diagnosis-dialog .el-dialog__body) {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 15px 20px;
 }
 </style>

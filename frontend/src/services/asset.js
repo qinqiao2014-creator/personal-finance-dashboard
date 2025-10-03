@@ -15,6 +15,10 @@ export const assetAPI = {
   getAssetSummary: () => api.get("/assets/summary/total"),
   getAssetTrend: (days = 30) =>
     api.get("/assets/chart/trend", { params: { days } }),
+
+  // ✅ 新增：美林资产配置分析
+  getAllocationAnalysis: (phase = "recovery") =>
+    api.get("/assets/merrill/allocation-analysis", { params: { phase } }),
 };
 
 // export const getAssetTrend = (days = 30) =>

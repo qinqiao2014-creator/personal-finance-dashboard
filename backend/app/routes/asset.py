@@ -366,7 +366,7 @@ async def get_trend_fallback(db, current_user, from_date, days):
 
 
 #美林时钟相关
-@router.get("merrill/allocation-analysis", response_model=AllocationAnalysis)
+@router.get("/merrill/allocation-analysis", response_model=AllocationAnalysis)
 async def get_allocation_analysis(
     phase: str = "recovery",  # 美林时钟阶段参数
     db: Session = Depends(get_db),
