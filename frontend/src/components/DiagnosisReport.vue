@@ -122,8 +122,11 @@
         :closable="false"
       >
         <p>总资产: ¥{{ report.total_amount.toFixed(2) }}</p>
+        <!-- 不显示ID -->
+        <!--
         <p v-if="report.report_id">报告ID: {{ report.report_id }}</p>
         <p v-if="report.id">报告ID: {{ report.id }}</p>
+        -->
       </el-alert>
     </div>
 
@@ -404,6 +407,8 @@ const debugReportData = () => {
     economic_phase: props.report.economic_phase,
     has_economic_phase: !!props.report.economic_phase,
     report_id: props.report.id || props.report.report_id,
+    id: props.report.id,
+    report_id: props.report.report_id,
     all_keys: Object.keys(props.report),
   });
   // 检查经济周期相关的可能字段

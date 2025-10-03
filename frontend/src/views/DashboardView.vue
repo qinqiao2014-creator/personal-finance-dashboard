@@ -116,7 +116,7 @@
           </div>
         </div>
       </template>
-      <MerrillClock />
+      <MerrillClock ref="merrillClockRef" />
     </el-card>
 
     <!-- 诊断结果对话框 -->
@@ -195,7 +195,8 @@ import AssetTrendChart from "@/components/AssetTrendChart.vue";
 import MerrillClock from "@/components/MerrillClock.vue";
 
 const authStore = useAuthStore();
-
+// 美林时钟组件
+const merrillClockRef = ref(null);
 // 数据
 const totalAssets = ref(0);
 const assetsCount = ref(0);
@@ -371,7 +372,9 @@ const startDiagnosis = async () => {
     await runDiagnosisStep(1000);
 
     // 获取真实数据
-    const response = await assetAPI.getAllocationAnalysis("recovery");
+    // 直接从 MerrillClock 即ref="merrillClockRef" 组件获取当前周期
+    const currentPhase = merrillClockRef.value.getCurrentPhase();
+    const response = await assetAPI.getAllocationAnalysis(currentPhase);
     diagnosisResult.value = response.data;
 
     ElMessage.success("资产配置诊断完成");

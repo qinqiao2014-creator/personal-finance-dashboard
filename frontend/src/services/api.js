@@ -39,8 +39,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // 清除认证信息
       localStorage.removeItem("token");
+      localStorage.removeItem("user");
       // window.location.href = "/login"; //不需要跳转
+      // 如果当前不在登录页，则跳转
+      if (!window.location.pathname.includes("/login")) {
+        console.log("🔐 认证失效，跳转到登录页");
+        window.location.href =
+          "/login?redirect=" + encodeURIComponent(window.location.pathname);
+      }
     }
     return Promise.reject(error);
   }

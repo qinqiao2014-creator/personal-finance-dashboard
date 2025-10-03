@@ -28,7 +28,7 @@ npm run dev
 npm run build
 ```
 
-美林时钟模块：script 脚本用于选择周期
+MerrillClock.vue美林时钟模块：script 脚本用于选择周期
 // ==================== 配置区域 - 只需修改这里 ====================
 const config = {
 // 当前经济阶段（四选一）：

@@ -95,6 +95,11 @@ const config = {
   // 是否启用闪烁效果
   pulseEnabled: true,
 };
+
+// 暴露当前周期给父组件
+defineExpose({
+  getCurrentPhase: () => config.currentPhase,
+});
 // ==================== 配置区域结束 ====================
 
 // 美林时钟阶段定义
@@ -274,20 +279,21 @@ const getAssetColor = (asset) => {
 /* 激活状态的脉冲效果 */
 .phase-quadrant.active {
   border: 3px solid #409eff;
-  box-shadow: inset 0 0 20px rgba(64, 158, 255, 0.15),
-    0 0 20px rgba(64, 158, 255, 0.3); /* 添加外发光 */
+  box-shadow: inset 0 0 20px rgba(81, 245, 207, 0.15),
+    0 0 20px rgba(44, 228, 212, 0.3); /* 添加外发光 */
   animation: quadrantPulse 2s ease-in-out infinite;
 }
 
 @keyframes quadrantPulse {
   0%,
   100% {
-    box-shadow: inset 0 0 20px rgba(64, 158, 255, 0.15),
+    box-shadow: inset 0 0 20px rgba(65, 223, 160, 0.15),
       0 0 20px rgba(64, 158, 255, 0.3);
   }
   50% {
-    box-shadow: inset 0 0 20px rgba(64, 158, 255, 0.25),
-      0 0 30px rgba(64, 158, 255, 0.5);
+    box-shadow: inset 0 0 30px rgba(64, 158, 255, 0.3),
+      0 0 40px rgba(64, 158, 255, 0.6);
+    background: rgba(64, 158, 255, 0.1); /* 添加背景色变化 */
   }
 }
 
