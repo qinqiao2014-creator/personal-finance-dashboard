@@ -73,6 +73,8 @@ class AllocationAnalysis(BaseModel):
     adjustment_advice: List[AdjustmentAdvice]
     health_score: float
     total_amount: float
+    economic_phase: Optional[str] = "recovery"  # 新增字段
+    report_id: Optional[int] = None  # 新增字段
 
     class Config:
         from_attributes = True

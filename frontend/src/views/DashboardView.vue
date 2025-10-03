@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard-container">
-    <h2>个人资产管理系统</h2>
+    <h2>个人（家庭）资产管理系统</h2>
 
     <!-- 用户欢迎信息 -->
     <el-card class="welcome-card">

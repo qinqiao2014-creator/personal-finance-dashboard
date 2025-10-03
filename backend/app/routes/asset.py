@@ -415,6 +415,7 @@ async def get_allocation_analysis(
         # 在返回结果中添加报告ID
         analysis_result_dict = analysis_result
         analysis_result_dict["report_id"] = report.id
+        analysis_result_dict["economic_phase"] = phase
         
         return analysis_result_dict
         

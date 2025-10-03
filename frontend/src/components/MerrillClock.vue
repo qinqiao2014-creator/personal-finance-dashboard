@@ -271,9 +271,24 @@ const getAssetColor = (asset) => {
   transition: all 0.3s ease;
 }
 
+/* 激活状态的脉冲效果 */
 .phase-quadrant.active {
   border: 3px solid #409eff;
-  box-shadow: inset 0 0 20px rgba(64, 158, 255, 0.15);
+  box-shadow: inset 0 0 20px rgba(64, 158, 255, 0.15),
+    0 0 20px rgba(64, 158, 255, 0.3); /* 添加外发光 */
+  animation: quadrantPulse 2s ease-in-out infinite;
+}
+
+@keyframes quadrantPulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 20px rgba(64, 158, 255, 0.15),
+      0 0 20px rgba(64, 158, 255, 0.3);
+  }
+  50% {
+    box-shadow: inset 0 0 20px rgba(64, 158, 255, 0.25),
+      0 0 30px rgba(64, 158, 255, 0.5);
+  }
 }
 
 .phase-quadrant.active::after {
@@ -443,12 +458,23 @@ const getAssetColor = (asset) => {
     gap: 8px;
   }
   .clock-circle {
-    width: 280px;
-    height: 280px;
+    width: 360px;
+    height: 360px;
+    border-radius: 50%;
+    background: transparent; /* 改为透明 */
+    position: relative;
+    border: 6px solid #e8e8e8;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    overflow: hidden; /* 添加这个 */
   }
+  /* 修复象限样式 */
   .phase-quadrant {
-    width: 140px;
-    height: 140px;
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    transform-origin: 100% 100%;
+    transition: all 0.3s ease;
+    background: transparent !important; /* 移除背景色 */
   }
   .phase-overheat {
     left: 140px;

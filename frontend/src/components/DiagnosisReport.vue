@@ -184,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, defineProps, defineEmits } from "vue";
+import { ref, onMounted, defineProps, defineEmits, watch } from "vue";
 import { Top, Bottom, Clock, Delete } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { assetAPI } from "@/services/asset";
@@ -349,6 +349,8 @@ const getScoreTagType = (score) => {
 };
 
 const getPhaseTagType = (phase) => {
+  // 添加空值检查
+  if (!phase) return "info";
   const types = {
     recovery: "success",
     overheat: "warning",
@@ -359,6 +361,9 @@ const getPhaseTagType = (phase) => {
 };
 
 const getPhaseName = (phase) => {
+  // 添加空值检查
+  if (!phase) return "未知周期";
+
   const names = {
     recovery: "复苏期",
     overheat: "过热期",
@@ -390,6 +395,46 @@ onMounted(() => {
 defineExpose({
   loadHistoryReports,
   openHistoryReports,
+});
+
+//debug
+// 添加详细的调试方法
+const debugReportData = () => {
+  console.log("🔍 报告数据调试:", {
+    economic_phase: props.report.economic_phase,
+    has_economic_phase: !!props.report.economic_phase,
+    report_id: props.report.id || props.report.report_id,
+    all_keys: Object.keys(props.report),
+  });
+  // 检查经济周期相关的可能字段
+  const possiblePhaseFields = [
+    "economic_phase",
+    "phase",
+    "economicPhase",
+    "economic_period",
+    "period",
+  ];
+  possiblePhaseFields.forEach((field) => {
+    if (props.report[field]) {
+      console.log(`📌 找到经济周期字段 ${field}:`, props.report[field]);
+    }
+  });
+};
+
+// 监听报告数据变化
+watch(
+  () => props.report,
+  (newReport) => {
+    console.log("🔄 报告数据更新");
+    debugReportData();
+  },
+  { deep: true, immediate: true }
+);
+
+// 组件挂载时也调试
+onMounted(() => {
+  console.log("🚀 组件挂载完成");
+  debugReportData();
 });
 </script>
 
