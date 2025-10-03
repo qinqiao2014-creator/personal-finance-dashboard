@@ -5,9 +5,11 @@ from typing import List, Optional
 from app.database import get_db
 from app.models import Asset, AssetCategory, User
 from app.auth import get_current_user
-from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse, AssetSummary
+from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse, AssetSummary,AllocationAnalysis
 from datetime import datetime, timedelta
 import random
+from app.utils.merrill_mapper import MerrillAllocationMapper
+
 
 
 TREND_MOCK = False   # True=随机模拟  False=真实数据
@@ -363,64 +365,35 @@ async def get_trend_fallback(db, current_user, from_date, days):
     return trend_data
 
 
-# @router.get("/chart/trend", response_model=List[dict])
-# async def get_asset_trend(
-#     days: int = Query(30, ge=1, le=365),
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user)
-# ):
-#     if TREND_MOCK:
-#         # ===== 随机模拟 =====
-#         user_total = db.query(func.sum(Asset.amount)).filter(Asset.owner_id == current_user.id).scalar() or 100000
-#         trend_data = []
-#         base_date = datetime.now()
-#         for i in range(days, -1, -1):
-#             date = base_date - timedelta(days=i)
-#             variation = (random.random() - 0.5) * 0.05
-#             value = trend_data[-1]["value"] * (1 + variation) if trend_data else user_total
-#             trend_data.append({"date": date.strftime("%Y-%m-%d"), "value": round(value, 2)})
-#         return trend_data
-#     else:
-#         # ===== 真实数据 - 简化但正确的累计逻辑 =====
-#         from_date = datetime.now() - timedelta(days=days)
-#         print("🔍 查询起始日期:", from_date.date())
+#美林时钟相关
+@router.get("merrill/allocation-analysis", response_model=AllocationAnalysis)
+async def get_allocation_analysis(
+    phase: str = "recovery",  # 美林时钟阶段参数
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取用户资产配置分析报告
+    - phase: 美林时钟阶段 (recovery, overheat, stagflation, recession)
+    """
+    # 参数验证
+    valid_phases = ["recovery", "overheat", "stagflation", "recession"]
+    if phase not in valid_phases:
+        phase = "recovery"
+    
+    try:
+        # 获取用户所有资产 - 使用您现有的查询方式
+        assets = db.query(Asset).filter(Asset.owner_id == current_user.id).all()
         
-#         # 方法1：直接计算每天的累计总额（更简单可靠）
-#         # 获取所有资产的创建日期和金额
-#         all_assets = db.query(
-#             Asset.created_at,
-#             Asset.amount
-#         ).filter(
-#             Asset.owner_id == current_user.id
-#         ).all()
+        # 使用美林映射器进行分析
+        mapper = MerrillAllocationMapper(db)
+        analysis_result = mapper.analyze_user_allocation(assets, phase)
         
-#         print(f"🔍 用户共有 {len(all_assets)} 条资产记录")
+        return analysis_result
         
-#         # 构建日期范围内的累计数据
-#         trend_data = []
-#         current_date = from_date.date()
-#         end_date = datetime.now().date()
-        
-#         while current_date <= end_date:
-#             date_str = current_date.strftime("%Y-%m-%d")
-            
-#             # 计算到当前日期为止的总资产
-#             cumulative_total = 0.0
-#             for asset in all_assets:
-#                 asset_date = asset.created_at.date()
-#                 if asset_date <= current_date:
-#                     cumulative_total += asset.amount
-            
-#             trend_data.append({
-#                 "date": date_str,
-#                 "value": float(cumulative_total)
-#             })
-            
-#             current_date += timedelta(days=1)
-        
-#         print(f"📊 生成的趋势数据点: {len(trend_data)}")
-#         if trend_data:
-#             print(f"📈 数据范围: {trend_data[0]['date']} -> {trend_data[-1]['date']}")
-#             print(f"💰 金额范围: {trend_data[0]['value']} -> {trend_data[-1]['value']}")
-        
-#         return trend_data
+    except Exception as e:
+        # 使用您现有的错误处理风格
+        raise HTTPException(
+            status_code=500, 
+            detail=f"资产配置分析失败: {str(e)}"
+        )

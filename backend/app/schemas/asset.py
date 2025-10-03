@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
+from typing import Dict, List, Optional
+from pydantic import BaseModel
 
 # 资产基础模式
 class AssetBase(BaseModel):
@@ -52,3 +54,25 @@ class AssetSummary(BaseModel):
 class AssetListResponse(BaseModel):
     total: int
     items: list[AssetResponse]
+
+#美林时钟相关
+class AdjustmentAdvice(BaseModel):
+    """调整建议模型"""
+    category: str
+    category_name: str
+    action: str  # 'increase' or 'decrease'
+    amount: float
+    current_percent: float
+    suggested_percent: float
+    reason: str
+
+class AllocationAnalysis(BaseModel):
+    """资产配置分析结果"""
+    user_allocation: Dict[str, float]
+    merrill_suggestion: Dict[str, float]
+    adjustment_advice: List[AdjustmentAdvice]
+    health_score: float
+    total_amount: float
+
+    class Config:
+        from_attributes = True
