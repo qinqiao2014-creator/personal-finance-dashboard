@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+
 # SQLite 数据库连接
 SQLALCHEMY_DATABASE_URL = "sqlite:///./assets.db"  # 数据库文件会在项目根目录创建
 

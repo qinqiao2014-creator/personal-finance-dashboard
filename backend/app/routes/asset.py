@@ -368,7 +368,7 @@ async def get_trend_fallback(db, current_user, from_date, days):
 #美林时钟相关
 @router.get("/merrill/allocation-analysis", response_model=AllocationAnalysis)
 async def get_allocation_analysis(
-    phase: str = "recovery",  # 美林时钟阶段参数
+    phase: str = "recovery",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -382,17 +382,43 @@ async def get_allocation_analysis(
         phase = "recovery"
     
     try:
-        # 获取用户所有资产 - 使用您现有的查询方式
+        # 获取用户所有资产
         assets = db.query(Asset).filter(Asset.owner_id == current_user.id).all()
         
         # 使用美林映射器进行分析
         mapper = MerrillAllocationMapper(db)
         analysis_result = mapper.analyze_user_allocation(assets, phase)
         
-        return analysis_result
+        # 保存诊断报告到数据库
+        from datetime import datetime
+        from app.models.diagnosis_report import DiagnosisReport
+        
+        title = f"资产诊断报告 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
+        report = DiagnosisReport(
+            user_id=current_user.id,
+            title=title,
+            health_score=analysis_result["health_score"],
+            total_amount=analysis_result["total_amount"],
+            user_allocation=analysis_result["user_allocation"],
+            merrill_suggestion=analysis_result["merrill_suggestion"],
+            adjustment_advice=analysis_result["adjustment_advice"],
+            economic_phase=phase
+        )
+
+
+        
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+        
+        # 在返回结果中添加报告ID
+        analysis_result_dict = analysis_result
+        analysis_result_dict["report_id"] = report.id
+        
+        return analysis_result_dict
         
     except Exception as e:
-        # 使用您现有的错误处理风格
         raise HTTPException(
             status_code=500, 
             detail=f"资产配置分析失败: {str(e)}"

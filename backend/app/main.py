@@ -7,6 +7,8 @@ from app.auth import auth as auth_router
 from app.routes import user as user_router  
 from app.routes import asset as asset_router
 from app.routes import categories as categories_router
+from app.routes import diagnosis_report as diagnosis_report_router
+
 # 暂时注释掉analytics，等后续开发
 # from app.routes import analytics as analytics_router
 
@@ -35,6 +37,7 @@ app.include_router(auth_router.router)
 app.include_router(user_router.router)  
 app.include_router(asset_router.router)
 app.include_router(categories_router.router)
+app.include_router(diagnosis_report_router.router)
 # 暂时注释掉analytics
 # app.include_router(analytics_router.router, prefix="/api/analytics", tags=["analytics"])
 

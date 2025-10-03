@@ -88,12 +88,12 @@
     </div>
 
     <!-- 美林投资时钟 -->
+    <!-- 美林投资时钟部分简化 -->
     <el-card class="chart-card full-width">
       <template #header>
         <div class="clock-header-with-diagnosis">
           <span>美林投资时钟</span>
           <div class="diagnosis-controls">
-            <!-- 初始状态：诊断按钮 -->
             <el-button
               v-if="!diagnosisResult"
               type="primary"
@@ -105,7 +105,6 @@
               诊断资产配置
             </el-button>
 
-            <!-- 已有诊断：显示结果和重新诊断 -->
             <div v-else class="diagnosis-brief">
               <span class="health-badge"
                 >健康度: {{ diagnosisResult.health_score }}/100</span
@@ -113,13 +112,6 @@
               <el-button @click="showDiagnosisDetail" size="small"
                 >查看详情</el-button
               >
-              <el-button
-                @click="startDiagnosis"
-                :loading="diagnosing"
-                size="small"
-              >
-                重新诊断
-              </el-button>
             </div>
           </div>
         </div>
@@ -127,20 +119,27 @@
       <MerrillClock />
     </el-card>
 
-    <!-- 新增：诊断结果对话框 -->
-    <!-- 添加自定义类名diagnosis-dialog，可以在CSS控制窗口大小 -->
+    <!-- 诊断结果对话框 -->
     <el-dialog
       v-model="showDiagnosisDialog"
       class="diagnosis-dialog"
       :title="diagnosisResult ? '资产配置诊断报告' : '资产配置诊断中...'"
-      width="800px"
+      width="900px"
     >
       <DiagnosisProcess
         v-if="!diagnosisResult"
         :current-step="currentStep"
         :step-progress="stepProgress"
       />
-      <DiagnosisReport v-else :report="diagnosisResult" />
+      <!-- 修复：添加 showHistoryControls 属性和事件处理 -->
+      <DiagnosisReport
+        v-else
+        :report="diagnosisResult"
+        :show-history-controls="true"
+        @rediagnose="startDiagnosis"
+        @report-loaded="handleReportLoaded"
+        @report-deleted="handleReportDeleted"
+      />
     </el-dialog>
 
     <!-- 原有的分类统计进度条 -->
@@ -222,6 +221,33 @@ const currentDate = computed(() => new Date().toLocaleDateString("zh-CN"));
 
 // 自动刷新定时器
 let refreshInterval = null;
+
+// 新增：加载最新诊断报告
+const loadLatestDiagnosisReport = async () => {
+  try {
+    console.log("正在加载最新诊断报告...");
+    const response = await assetAPI.getDiagnosisReports();
+    const reports = response.data.reports || [];
+
+    if (reports.length > 0) {
+      // 获取最新的报告
+      const latestReport = reports[0];
+      console.log("找到最新诊断报告:", latestReport);
+
+      // 设置诊断结果，这样首页就会显示"查看详情"
+      diagnosisResult.value = {
+        ...latestReport,
+        report_id: latestReport.id, // 确保有 report_id
+      };
+    } else {
+      console.log("没有找到历史诊断报告");
+      diagnosisResult.value = null;
+    }
+  } catch (error) {
+    console.error("加载最新诊断报告失败:", error);
+    // 不显示错误消息，因为可能是没有报告
+  }
+};
 
 // 计算分类百分比
 const getCategoryPercentage = (categoryAmount) => {
@@ -327,28 +353,25 @@ const toggleAutoRefresh = () => {
 // 开始诊断流程
 const startDiagnosis = async () => {
   diagnosing.value = true;
-  showDiagnosisDialog.value = true; // 立即显示对话框展示动画
-  diagnosisResult.value = null; // 重置结果
+  showDiagnosisDialog.value = true;
+  diagnosisResult.value = null;
 
   try {
-    // 步骤1: 分析资产配置 (2秒)
+    // 运行动画步骤
     currentStep.value = 1;
     stepProgress.value = 0;
     await runDiagnosisStep(2000);
 
-    // 步骤2: 匹配经济周期 (2秒)
     currentStep.value = 2;
     stepProgress.value = 0;
     await runDiagnosisStep(1500);
 
-    // 步骤3: 生成报告 (1秒)
     currentStep.value = 3;
     stepProgress.value = 0;
     await runDiagnosisStep(1000);
 
     // 获取真实数据
-    const currentPhase = "recovery";
-    const response = await assetAPI.getAllocationAnalysis(currentPhase);
+    const response = await assetAPI.getAllocationAnalysis("recovery");
     diagnosisResult.value = response.data;
 
     ElMessage.success("资产配置诊断完成");
@@ -358,6 +381,16 @@ const startDiagnosis = async () => {
   } finally {
     diagnosing.value = false;
   }
+};
+
+// 查看诊断详情
+const showDiagnosisDetail = () => {
+  showDiagnosisDialog.value = true;
+};
+
+// 处理报告加载事件
+const handleReportLoaded = (report) => {
+  diagnosisResult.value = report;
 };
 
 // 新增：运行动画步骤的方法
@@ -379,9 +412,21 @@ const runDiagnosisStep = (duration) => {
   });
 };
 
-// 添加缺失的方法
-const showDiagnosisDetail = () => {
-  showDiagnosisDialog.value = true;
+// 处理报告删除事件
+const handleReportDeleted = (reportId) => {
+  console.log("报告被删除:", reportId);
+
+  // 如果删除的是当前显示的报告，清空诊断结果
+  if (
+    diagnosisResult.value &&
+    (diagnosisResult.value.id === reportId ||
+      diagnosisResult.value.report_id === reportId)
+  ) {
+    diagnosisResult.value = null;
+    showDiagnosisDialog.value = false;
+  }
+
+  ElMessage.success("报告删除成功");
 };
 
 // 退出登录
@@ -392,6 +437,8 @@ const logout = () => {
 
 onMounted(() => {
   fetchAssets();
+  // 新增：页面加载时检查是否有历史诊断记录
+  loadLatestDiagnosisReport();
 });
 
 onUnmounted(() => {

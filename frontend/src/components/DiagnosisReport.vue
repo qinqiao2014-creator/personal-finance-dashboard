@@ -4,8 +4,33 @@
     <div class="report-header">
       <h3>资产配置诊断报告</h3>
       <div class="report-meta">
-        <span>生成时间: {{ new Date().toLocaleString("zh-CN") }}</span>
+        <span
+          >生成时间:
+          {{
+            formatDate(report.created_at) || new Date().toLocaleString("zh-CN")
+          }}</span
+        >
         <el-tag type="primary">美林时钟分析</el-tag>
+        <!-- 历史报告操作按钮 -->
+        <div v-if="showHistoryControls" class="history-controls">
+          <el-button size="small" @click="openHistoryReports" :icon="Clock">
+            历史报告
+          </el-button>
+          <el-button size="small" type="primary" @click="$emit('rediagnose')">
+            重新诊断
+          </el-button>
+          <!-- 新增：删除当前报告按钮 -->
+          <el-button
+            size="small"
+            type="danger"
+            @click="deleteCurrentReport"
+            :loading="deletingCurrent"
+            v-if="report.id || report.report_id"
+          >
+            <el-icon><Delete /></el-icon>
+            删除报告
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -19,6 +44,12 @@
         <div class="score-description">
           <h4>配置评价</h4>
           <p>{{ getHealthDescription(report.health_score) }}</p>
+          <p class="economic-phase">
+            当前经济周期:
+            <el-tag :type="getPhaseTagType(report.economic_phase)">{{
+              getPhaseName(report.economic_phase)
+            }}</el-tag>
+          </p>
         </div>
       </div>
     </div>
@@ -91,22 +122,188 @@
         :closable="false"
       >
         <p>总资产: ¥{{ report.total_amount.toFixed(2) }}</p>
+        <p v-if="report.report_id">报告ID: {{ report.report_id }}</p>
+        <p v-if="report.id">报告ID: {{ report.id }}</p>
       </el-alert>
     </div>
+
+    <!-- 历史报告对话框 -->
+    <el-dialog v-model="showHistoryReports" title="历史诊断报告" width="900px">
+      <div class="history-reports">
+        <el-table :data="historyReports" style="width: 100%">
+          <el-table-column prop="title" label="报告标题" width="200">
+            <template #default="{ row }">
+              <div class="report-title">
+                <span>{{ row.title }}</span>
+                <el-tag size="small" :type="getScoreTagType(row.health_score)">
+                  {{ row.health_score }}分
+                </el-tag>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="economic_phase" label="经济周期" width="120">
+            <template #default="{ row }">
+              <el-tag :type="getPhaseTagType(row.economic_phase)">
+                {{ getPhaseName(row.economic_phase) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="total_amount" label="总资产" width="150">
+            <template #default="{ row }">
+              ¥{{ row.total_amount.toLocaleString() }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" label="生成时间" width="180">
+            <template #default="{ row }">
+              {{ formatDate(row.created_at) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="180">
+            <template #default="{ row }">
+              <el-button size="small" @click="loadReportDetail(row.id)">
+                查看详情
+              </el-button>
+              <el-button
+                size="small"
+                type="danger"
+                @click="deleteReport(row.id)"
+                :loading="deletingReportId === row.id"
+              >
+                删除
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-if="historyReports.length === 0" class="empty-reports">
+          <el-empty description="暂无历史诊断报告" />
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { Top, Bottom } from "@element-plus/icons-vue";
+import { ref, onMounted, defineProps, defineEmits } from "vue";
+import { Top, Bottom, Clock, Delete } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { assetAPI } from "@/services/asset";
 
-defineProps({
+const props = defineProps({
   report: {
     type: Object,
     required: true,
   },
+  showHistoryControls: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-// 分类名称映射
+const emit = defineEmits(["rediagnose", "reportLoaded", "reportDeleted"]);
+
+// 响应式数据
+const showHistoryReports = ref(false);
+const historyReports = ref([]);
+const loadingHistory = ref(false);
+const deletingCurrent = ref(false);
+const deletingReportId = ref(null);
+
+// 删除当前报告
+const deleteCurrentReport = async () => {
+  const reportId = props.report.id || props.report.report_id;
+  if (!reportId) {
+    ElMessage.error("无法获取报告ID");
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      "确定要删除这份诊断报告吗？此操作不可恢复。",
+      "删除确认",
+      { type: "warning" }
+    );
+
+    deletingCurrent.value = true;
+    await assetAPI.deleteDiagnosisReport(reportId);
+
+    ElMessage.success("报告删除成功");
+
+    // 发射删除事件，让父组件处理
+    emit("reportDeleted", reportId);
+
+    // 重新加载历史报告
+    await loadHistoryReports();
+  } catch (error) {
+    if (error !== "cancel") {
+      ElMessage.error("删除报告失败");
+    }
+  } finally {
+    deletingCurrent.value = false;
+  }
+};
+
+// 删除历史报告
+const deleteReport = async (reportId) => {
+  try {
+    await ElMessageBox.confirm(
+      "确定要删除这份诊断报告吗？此操作不可恢复。",
+      "删除确认",
+      { type: "warning" }
+    );
+
+    deletingReportId.value = reportId;
+    await assetAPI.deleteDiagnosisReport(reportId);
+
+    ElMessage.success("报告删除成功");
+
+    // 如果删除的是当前正在查看的报告，通知父组件
+    const currentReportId = props.report.id || props.report.report_id;
+    if (currentReportId === reportId) {
+      emit("reportDeleted", reportId);
+    }
+
+    // 重新加载历史报告列表
+    await loadHistoryReports();
+  } catch (error) {
+    if (error !== "cancel") {
+      ElMessage.error("删除报告失败");
+    }
+  } finally {
+    deletingReportId.value = null;
+  }
+};
+
+// 加载历史报告
+const loadHistoryReports = async () => {
+  loadingHistory.value = true;
+  try {
+    console.log("开始加载历史报告...");
+    const response = await assetAPI.getDiagnosisReports();
+    console.log("历史报告响应:", response);
+    historyReports.value = response.data.reports || [];
+  } catch (error) {
+    console.error("加载历史报告失败:", error);
+    ElMessage.error("加载历史报告失败");
+  } finally {
+    loadingHistory.value = false;
+  }
+};
+
+// 加载报告详情
+const loadReportDetail = async (reportId) => {
+  try {
+    const response = await assetAPI.getDiagnosisReport(reportId);
+    // 发射事件让父组件更新当前报告
+    emit("reportLoaded", response.data);
+    showHistoryReports.value = false;
+  } catch (error) {
+    console.error("加载报告详情失败:", error);
+    ElMessage.error("加载报告详情失败");
+  }
+};
+
+// 工具函数
 const getCategoryName = (category) => {
   const names = {
     equity: "权益类",
@@ -117,7 +314,6 @@ const getCategoryName = (category) => {
   return names[category] || category;
 };
 
-// 进度条颜色
 const getProgressColor = (category) => {
   const colors = {
     equity: "#e6a23c",
@@ -128,14 +324,12 @@ const getProgressColor = (category) => {
   return colors[category] || "#909399";
 };
 
-// 健康度描述
 const getHealthDescription = (score) => {
   if (score >= 80) return "您的资产配置较为合理，与当前经济周期匹配度较高";
   if (score >= 60) return "配置基本合理，有少量优化空间";
   return "配置与建议偏差较大，建议及时调整";
 };
 
-// 总结标题和类型
 const getSummaryTitle = (score) => {
   if (score >= 80) return "配置良好";
   if (score >= 60) return "配置一般";
@@ -147,6 +341,56 @@ const getSummaryType = (score) => {
   if (score >= 60) return "warning";
   return "error";
 };
+
+const getScoreTagType = (score) => {
+  if (score >= 80) return "success";
+  if (score >= 60) return "warning";
+  return "danger";
+};
+
+const getPhaseTagType = (phase) => {
+  const types = {
+    recovery: "success",
+    overheat: "warning",
+    stagflation: "danger",
+    recession: "info",
+  };
+  return types[phase] || "info";
+};
+
+const getPhaseName = (phase) => {
+  const names = {
+    recovery: "复苏期",
+    overheat: "过热期",
+    stagflation: "滞胀期",
+    recession: "衰退期",
+  };
+  return names[phase] || phase;
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return "";
+  return new Date(dateString).toLocaleString("zh-CN");
+};
+
+// 打开历史报告时加载数据
+const openHistoryReports = () => {
+  showHistoryReports.value = true;
+  loadHistoryReports();
+};
+
+// 组件挂载时，如果是历史报告模式，加载历史数据
+onMounted(() => {
+  if (props.showHistoryControls) {
+    loadHistoryReports();
+  }
+});
+
+// 暴露方法给父组件
+defineExpose({
+  loadHistoryReports,
+  openHistoryReports,
+});
 </script>
 
 <style scoped>
@@ -157,7 +401,7 @@ const getSummaryType = (score) => {
 .report-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 20px;
   padding-bottom: 15px;
   border-bottom: 1px solid #f0f0f0;
@@ -172,9 +416,15 @@ const getSummaryType = (score) => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 5px;
+  gap: 8px;
   font-size: 12px;
   color: #909399;
+}
+
+.history-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
 }
 
 .health-section {
@@ -219,6 +469,11 @@ const getSummaryType = (score) => {
   margin: 0;
   color: #606266;
   font-size: 14px;
+}
+
+.economic-phase {
+  margin-top: 8px !important;
+  font-size: 13px !important;
 }
 
 .comparison-section {
@@ -342,5 +597,28 @@ const getSummaryType = (score) => {
 
 .summary-section {
   margin-top: 20px;
+}
+
+.history-reports {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.empty-reports {
+  padding: 40px 0;
+}
+
+.report-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 确保按钮在小屏幕上也能正常显示 */
+@media (max-width: 768px) {
+  .history-controls {
+    flex-direction: column;
+    align-items: flex-end;
+  }
 }
 </style>

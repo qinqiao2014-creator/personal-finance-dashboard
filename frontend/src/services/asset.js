@@ -19,6 +19,11 @@ export const assetAPI = {
   // ✅ 新增：美林资产配置分析
   getAllocationAnalysis: (phase = "recovery") =>
     api.get("/assets/merrill/allocation-analysis", { params: { phase } }),
+
+  // ✅ 新增：诊断报告相关API - 根据您的后端路由调整
+  getDiagnosisReports: () => api.get("/reports"),
+  getDiagnosisReport: (reportId) => api.get(`/reports/${reportId}`),
+  deleteDiagnosisReport: (reportId) => api.delete(`/reports/${reportId}`),
 };
 
 // export const getAssetTrend = (days = 30) =>
