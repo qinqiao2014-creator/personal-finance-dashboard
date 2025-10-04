@@ -11,6 +11,15 @@
           }}</span
         >
         <el-tag type="primary">美林时钟分析</el-tag>
+        <!-- 资产分类说明按钮 -->
+        <el-button
+          type="text"
+          @click="showMappingGuide = true"
+          :icon="InfoFilled"
+          size="small"
+        >
+          我的资产如何分类？
+        </el-button>
         <!-- 历史报告操作按钮 -->
         <div v-if="showHistoryControls" class="history-controls">
           <el-button size="small" @click="openHistoryReports" :icon="Clock">
@@ -56,7 +65,23 @@
 
     <!-- 配置对比 -->
     <div class="comparison-section">
-      <h4>配置对比分析</h4>
+      <h4>
+        配置对比分析
+        <el-tooltip effect="dark" placement="top">
+          <template #content>
+            <div class="mapping-tip">
+              <p><strong>资产分类说明：</strong></p>
+              <ul>
+                <li><strong>权益类</strong>: 股票、股票基金等</li>
+                <li><strong>债券类</strong>: 银行理财、债券、保险等</li>
+                <li><strong>商品类</strong>: 房地产、黄金、加密货币等</li>
+                <li><strong>现金类</strong>: 存款、货币基金等</li>
+              </ul>
+            </div>
+          </template>
+          <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+        </el-tooltip>
+      </h4>
       <div class="allocation-comparison">
         <div
           v-for="(userPercent, category) in report.user_allocation"
@@ -64,7 +89,21 @@
           class="allocation-item"
         >
           <div class="category-info">
-            <span class="category-name">{{ getCategoryName(category) }}</span>
+            <span class="category-name">
+              {{ getCategoryName(category) }}
+              <!-- 每个分类单独的工具提示 -->
+              <el-tooltip effect="dark" placement="top">
+                <template #content>
+                  <div class="category-tip">
+                    <p>
+                      <strong>{{ getCategoryName(category) }}资产包含：</strong>
+                    </p>
+                    <p>{{ getCategoryDescription(category) }}</p>
+                  </div>
+                </template>
+                <el-icon class="info-icon"><InfoFilled /></el-icon>
+              </el-tooltip>
+            </span>
             <div class="percent-comparison">
               <span class="user-percent"
                 >{{ (userPercent * 100).toFixed(1) }}%</span
@@ -183,12 +222,129 @@
         </div>
       </div>
     </el-dialog>
+
+    <!-- 资产分类说明对话框 -->
+    <el-dialog v-model="showMappingGuide" title="了解资产分类" width="700px">
+      <div class="mapping-guide">
+        <div class="guide-section">
+          <h4>美林时钟四大资产类别</h4>
+          <div class="category-cards">
+            <div
+              v-for="category in merrillCategories"
+              :key="category.key"
+              class="category-card"
+            >
+              <div class="card-header">
+                <div
+                  class="color-indicator"
+                  :style="{ backgroundColor: category.color }"
+                ></div>
+                <strong>{{ category.name }}</strong>
+                <el-tag :type="category.tagType" size="small">{{
+                  category.risk
+                }}</el-tag>
+              </div>
+              <div class="card-content">
+                <p class="category-desc">{{ category.description }}</p>
+                <div class="typical-assets">
+                  <span class="asset-label">典型资产：</span>
+                  <div class="asset-tags">
+                    <el-tag
+                      v-for="asset in category.typicalAssets"
+                      :key="asset"
+                      size="small"
+                      effect="plain"
+                    >
+                      {{ asset }}
+                    </el-tag>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="guide-section">
+          <h4>常见问题解答</h4>
+          <el-collapse>
+            <el-collapse-item title="为什么银行理财被归为债券类？">
+              <p>
+                银行理财产品主要投资于债券、货币市场工具等固定收益类资产，其风险收益特征与债券基金类似，因此系统将其归入债券类别。
+              </p>
+            </el-collapse-item>
+            <el-collapse-item title="货币基金和银行理财有什么区别？">
+              <p>
+                货币基金主要投资短期货币市场工具，流动性更高、风险更低，归为现金类；银行理财投资范围更广，期限更长，风险收益略高，归为债券类。
+              </p>
+            </el-collapse-item>
+            <el-collapse-item title="为什么房地产属于商品类？">
+              <p>
+                房地产是实物资产，具有稀缺性、抗通胀特性，其价格受供需关系影响，这些特征与大宗商品类似，因此在美林时钟中归为商品类。
+              </p>
+            </el-collapse-item>
+            <el-collapse-item title="为什么比特币属于商品类？">
+              <p>
+                比特币等加密货币在美林时钟中被归为商品类，主要基于以下原因：
+              </p>
+              <ul>
+                <li>
+                  <strong>数字商品属性</strong
+                  >：比特币具有稀缺性（总量2100万枚）、可交易性等商品特征
+                </li>
+                <li>
+                  <strong>通胀对冲功能</strong
+                  >：类似黄金，在某些经济环境下具有抗通胀特性
+                </li>
+                <li>
+                  <strong>独立于传统金融</strong
+                  >：与股票、债券等传统资产相关性较低
+                </li>
+                <li>
+                  <strong>动态权重调整</strong
+                  >：系统会根据不同经济周期动态调整其在商品类中的权重比例
+                </li>
+              </ul>
+            </el-collapse-item>
+
+            <el-collapse-item title="为什么黄金属于商品类？">
+              <p>黄金作为传统避险资产，在美林时钟中明确归为商品类：</p>
+              <ul>
+                <li>
+                  <strong>实物商品本质</strong
+                  >：黄金是典型的实物商品，具有稀缺性和工业用途
+                </li>
+                <li>
+                  <strong>通胀时期表现突出</strong
+                  >：在高通胀环境下，黄金往往有较好表现
+                </li>
+                <li>
+                  <strong>避险属性</strong
+                  >：在地缘政治危机或经济不确定性时发挥避险作用
+                </li>
+                <li>
+                  <strong>货币属性</strong
+                  >：历史上作为货币储备，具有价值存储功能
+                </li>
+              </ul>
+              <p>在滞胀期和过热期，黄金在商品类资产中的配置权重会显著提高。</p>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, defineProps, defineEmits, watch } from "vue";
-import { Top, Bottom, Clock, Delete } from "@element-plus/icons-vue";
+import {
+  Top,
+  Bottom,
+  Clock,
+  Delete,
+  InfoFilled,
+  QuestionFilled,
+} from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { assetAPI } from "@/services/asset";
 
@@ -211,6 +367,49 @@ const historyReports = ref([]);
 const loadingHistory = ref(false);
 const deletingCurrent = ref(false);
 const deletingReportId = ref(null);
+
+// 资产分类说明相关
+const showMappingGuide = ref(false);
+
+// 美林时钟分类数据
+const merrillCategories = [
+  {
+    key: "equity",
+    name: "权益类",
+    color: "#e6a23c",
+    tagType: "warning",
+    risk: "中高风险",
+    description: "代表企业所有权，收益与经济增长正相关",
+    typicalAssets: ["股票", "股票型基金", "偏股混合基金"],
+  },
+  {
+    key: "bond",
+    name: "债券类",
+    color: "#67c23a",
+    tagType: "success",
+    risk: "中低风险",
+    description: "固定收益资产，在经济衰退期表现较好",
+    typicalAssets: ["银行理财", "债券", "保险产品"],
+  },
+  {
+    key: "commodity",
+    name: "商品类",
+    color: "#f56c6c",
+    tagType: "danger",
+    risk: "高风险",
+    description: "实物商品和资源，通胀时期表现突出",
+    typicalAssets: ["房地产", "黄金", "加密货币"],
+  },
+  {
+    key: "cash",
+    name: "现金类",
+    color: "#409eff",
+    tagType: "primary",
+    risk: "低风险",
+    description: "高流动性资产，防御性配置",
+    typicalAssets: ["活期存款", "货币基金", "短期理财"],
+  },
+];
 
 // 删除当前报告
 const deleteCurrentReport = async () => {
@@ -315,6 +514,16 @@ const getCategoryName = (category) => {
     cash: "现金类",
   };
   return names[category] || category;
+};
+
+const getCategoryDescription = (category) => {
+  const descriptions = {
+    equity: "包括股票、股票基金等权益类投资，收益与经济增长正相关",
+    bond: "包括银行理财、债券、保险等固定收益产品，风险相对较低",
+    commodity: "包括房地产、黄金、加密货币等实物和另类资产，抗通胀",
+    cash: "包括存款、货币基金等高流动性资产，用于资金管理",
+  };
+  return descriptions[category] || "各类资产配置";
 };
 
 const getProgressColor = (category) => {
@@ -533,6 +742,40 @@ onMounted(() => {
 .comparison-section h4 {
   margin-bottom: 15px;
   color: #303133;
+  display: flex;
+  align-items: center;
+}
+
+.tip-icon {
+  color: #409eff;
+  margin-left: 8px;
+  cursor: help;
+}
+
+.info-icon {
+  color: #909399;
+  margin-left: 4px;
+  cursor: help;
+  font-size: 12px;
+}
+
+.mapping-tip {
+  max-width: 250px;
+}
+
+.mapping-tip ul {
+  margin: 8px 0;
+  padding-left: 16px;
+}
+
+.mapping-tip li {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.category-tip {
+  max-width: 200px;
+  font-size: 12px;
 }
 
 .allocation-comparison {
@@ -557,6 +800,8 @@ onMounted(() => {
 .category-name {
   font-weight: 500;
   color: #303133;
+  display: flex;
+  align-items: center;
 }
 
 .percent-comparison {
@@ -664,11 +909,83 @@ onMounted(() => {
   gap: 8px;
 }
 
+/* 资产分类说明样式 */
+.mapping-guide {
+  padding: 10px;
+}
+
+.guide-section {
+  margin-bottom: 20px;
+}
+
+.guide-section h4 {
+  margin-bottom: 12px;
+  color: #303133;
+}
+
+.category-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.category-card {
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.color-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.card-header strong {
+  flex: 1;
+}
+
+.category-desc {
+  font-size: 12px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.typical-assets {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.asset-label {
+  font-size: 12px;
+  color: #909399;
+  white-space: nowrap;
+}
+
+.asset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 /* 确保按钮在小屏幕上也能正常显示 */
 @media (max-width: 768px) {
   .history-controls {
     flex-direction: column;
     align-items: flex-end;
+  }
+
+  .category-cards {
+    grid-template-columns: 1fr;
   }
 }
 </style>
