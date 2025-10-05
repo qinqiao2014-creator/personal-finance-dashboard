@@ -137,15 +137,17 @@
           />
 
           <!-- 开发时的功能：调试信息 -->
-          <div style="margin-top: 8px; font-size: 12px; color: #666">
-            调试信息:
-            <span v-if="assetForm.category_code">
-              已选择: {{ assetForm.category_code }} ({{
-                getCategoryName(assetForm.category_code)
-              }})
-            </span>
-            <span v-else style="color: red">未选择分类</span>
-          </div>
+          <template v-if="false">
+            <div style="margin-top: 8px; font-size: 12px; color: #666">
+              调试信息:
+              <span v-if="assetForm.category_code">
+                已选择: {{ assetForm.category_code }} ({{
+                  getCategoryName(assetForm.category_code)
+                }})
+              </span>
+              <span v-else style="color: red">未选择分类</span>
+            </div>
+          </template>
         </el-form-item>
 
         <el-form-item label="金额" prop="amount">

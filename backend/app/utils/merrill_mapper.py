@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.models import Asset, AssetCategory
 
 class MerrillAllocationMapper:
-    """美林时钟资产配置分析引擎"""
+    """美林时钟资产配置分析引擎 - V2分类体系版本"""
     
     # 美林时钟各阶段的标准配置建议
     MERRILL_STANDARD_SUGGESTIONS = {
@@ -13,29 +13,97 @@ class MerrillAllocationMapper:
         "recession": {"equity": 0.20, "bond": 0.50, "commodity": 0.20, "cash": 0.10}
     }
     
-    # 资产分类到美林大类的动态映射规则
+    # V2新分类体系到美林大类的动态映射规则
     MAPPING_RULES = {
-        # 加密货币 - 动态权重映射
-        "alternative.crypto": {
-            "recovery": {"equity": 0.6, "commodity": 0.3, "cash": 0.1, "bond": 0.0},
-            "overheat": {"equity": 0.4, "commodity": 0.5, "cash": 0.1, "bond": 0.0},
-            "stagflation": {"equity": 0.1, "commodity": 0.7, "cash": 0.2, "bond": 0.0},
-            "recession": {"equity": 0.3, "commodity": 0.5, "cash": 0.1, "bond": 0.1}
+        # ========== 权益类 ==========
+        # 股票 - 纯权益属性
+        "stock": {"equity": 1.0, "commodity": 0.0, "cash": 0.0, "bond": 0.0},
+        "a_stock": {"equity": 1.0, "commodity": 0.0, "cash": 0.0, "bond": 0.0},
+        "hk_stock": {"equity": 1.0, "commodity": 0.0, "cash": 0.0, "bond": 0.0},
+        "us_stock": {"equity": 1.0, "commodity": 0.0, "cash": 0.0, "bond": 0.0},
+        
+        # 基金 - 权益属性为主
+        "fund": {"equity": 1.0, "commodity": 0.0, "cash": 0.0, "bond": 0.0},
+        
+        # 权益衍生品 - 动态权重
+        "derivatives": {
+            "recovery": {"equity": 0.9, "commodity": 0.1, "cash": 0.0, "bond": 0.0},
+            "overheat": {"equity": 0.7, "commodity": 0.3, "cash": 0.0, "bond": 0.0},
+            "stagflation": {"equity": 0.5, "commodity": 0.5, "cash": 0.0, "bond": 0.0},
+            "recession": {"equity": 0.6, "commodity": 0.4, "cash": 0.0, "bond": 0.0}
         },
-        # 黄金 - 主要商品属性，但在不同阶段略有变化
-        "physical.gold": {
+        "cn_etf_options": {"equity": 0.8, "commodity": 0.2, "cash": 0.0, "bond": 0.0},
+        "us_stock_options": {"equity": 0.8, "commodity": 0.2, "cash": 0.0, "bond": 0.0},
+        
+        # ========== 固定收益类 ==========
+        "bond": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
+        "wealth_management": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
+        "national_debt": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
+        
+        # ========== 现金类 ==========
+        "money_market_fund": {"equity": 0.0, "commodity": 0.0, "cash": 1.0, "bond": 0.0},
+        "demand_deposit": {"equity": 0.0, "commodity": 0.0, "cash": 1.0, "bond": 0.0},
+        "time_deposit": {"equity": 0.0, "commodity": 0.0, "cash": 1.0, "bond": 0.0},
+        "large_deposit_certificate": {"equity": 0.0, "commodity": 0.0, "cash": 1.0, "bond": 0.0},
+        "housing_fund": {"equity": 0.0, "commodity": 0.0, "cash": 1.0, "bond": 0.0},
+        
+        # ========== 保险资产 ==========
+        "insurance": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
+        "increasing_whole_life": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
+        "annuity": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
+        "universal_insurance": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
+        
+        # ========== 实物资产 ==========
+        # 房地产 - 商品属性为主
+        "real_estate": {
+            "recovery": {"equity": 0.3, "commodity": 0.7, "cash": 0.0, "bond": 0.0},
+            "overheat": {"equity": 0.2, "commodity": 0.8, "cash": 0.0, "bond": 0.0},
+            "stagflation": {"equity": 0.1, "commodity": 0.9, "cash": 0.0, "bond": 0.0},
+            "recession": {"equity": 0.2, "commodity": 0.8, "cash": 0.0, "bond": 0.0}
+        },
+        
+        # 黄金 - 主要商品属性
+        "gold": {
             "recovery": {"equity": 0.1, "commodity": 0.9, "cash": 0.0, "bond": 0.0},
             "overheat": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
             "stagflation": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
             "recession": {"equity": 0.2, "commodity": 0.8, "cash": 0.0, "bond": 0.0}
         },
-        # 房地产 - 商品属性为主
-        "physical.real_estate": {
-            "recovery": {"equity": 0.3, "commodity": 0.7, "cash": 0.0, "bond": 0.0},
-            "overheat": {"equity": 0.2, "commodity": 0.8, "cash": 0.0, "bond": 0.0},
-            "stagflation": {"equity": 0.1, "commodity": 0.9, "cash": 0.0, "bond": 0.0},
-            "recession": {"equity": 0.2, "commodity": 0.8, "cash": 0.0, "bond": 0.0}
-        }
+        
+        # 汽车、收藏品 - 纯商品属性
+        "car": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
+        "collectibles": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
+        
+        # ========== 衍生品（纯合约） ==========
+        "commodity_futures_cn": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
+        "commodity_futures_us": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
+        "treasury_futures": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
+        "fx_derivatives": {"equity": 0.0, "commodity": 0.5, "cash": 0.5, "bond": 0.0},
+        "crypto_futures": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
+        
+        # ========== 另类投资 ==========
+        # 加密货币 - 动态权重（兼具商品和权益属性）
+        "crypto": {
+            "recovery": {"equity": 0.6, "commodity": 0.3, "cash": 0.1, "bond": 0.0},
+            "overheat": {"equity": 0.4, "commodity": 0.5, "cash": 0.1, "bond": 0.0},
+            "stagflation": {"equity": 0.1, "commodity": 0.7, "cash": 0.2, "bond": 0.0},
+            "recession": {"equity": 0.3, "commodity": 0.5, "cash": 0.1, "bond": 0.1}
+        },
+        
+        # REITs - 兼具权益和商品属性
+        "reits": {
+            "recovery": {"equity": 0.7, "commodity": 0.3, "cash": 0.0, "bond": 0.0},
+            "overheat": {"equity": 0.5, "commodity": 0.5, "cash": 0.0, "bond": 0.0},
+            "stagflation": {"equity": 0.3, "commodity": 0.7, "cash": 0.0, "bond": 0.0},
+            "recession": {"equity": 0.4, "commodity": 0.6, "cash": 0.0, "bond": 0.0}
+        },
+        
+        # 其他另类投资
+        "private_equity": {"equity": 0.8, "commodity": 0.2, "cash": 0.0, "bond": 0.0},
+        "hedge_fund": {"equity": 0.6, "commodity": 0.2, "cash": 0.2, "bond": 0.0},
+        "venture_capital": {"equity": 0.9, "commodity": 0.1, "cash": 0.0, "bond": 0.0},
+        "art_finance": {"equity": 0.2, "commodity": 0.8, "cash": 0.0, "bond": 0.0},
+        "other_alternative": {"equity": 0.5, "commodity": 0.5, "cash": 0.0, "bond": 0.0},
     }
     
     # 默认映射规则（用于没有特殊规则的资产）
@@ -43,9 +111,10 @@ class MerrillAllocationMapper:
         "equity": {"equity": 1.0, "commodity": 0.0, "cash": 0.0, "bond": 0.0},
         "fixed_income": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
         "cash": {"equity": 0.0, "commodity": 0.0, "cash": 1.0, "bond": 0.0},
+        "insurance": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0},
         "physical": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
-        "alternative": {"equity": 0.5, "commodity": 0.5, "cash": 0.0, "bond": 0.0},
-        "insurance": {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0}  # 保险归为债券类
+        "derivatives_pure": {"equity": 0.0, "commodity": 1.0, "cash": 0.0, "bond": 0.0},
+        "alternative": {"equity": 0.5, "commodity": 0.5, "cash": 0.0, "bond": 0.0}
     }
     
     def __init__(self, db: Session):
@@ -61,7 +130,7 @@ class MerrillAllocationMapper:
         if not category:
             return ""
         
-        # 构建完整路径 (如: equity.stock.cn_a)
+        # 构建完整路径
         path_codes = []
         current = category
         while current:
@@ -77,16 +146,25 @@ class MerrillAllocationMapper:
     
     def _get_mapping_weights(self, category_path: str, phase: str) -> Dict[str, float]:
         """获取指定分类在特定阶段的映射权重"""
+        # 提取叶子节点分类代码（最后一级）
+        leaf_category = category_path.split('.')[-1] if '.' in category_path else category_path
+        
         # 优先使用精确匹配的动态映射规则
-        if category_path in self.MAPPING_RULES and phase in self.MAPPING_RULES[category_path]:
-            return self.MAPPING_RULES[category_path][phase].copy()
+        if leaf_category in self.MAPPING_RULES:
+            rule = self.MAPPING_RULES[leaf_category]
+            if isinstance(rule, dict) and phase in rule:
+                # 动态规则
+                return rule[phase].copy()
+            elif isinstance(rule, dict) and all(k in ['equity', 'commodity', 'cash', 'bond'] for k in rule.keys()):
+                # 静态规则
+                return rule.copy()
         
         # 使用一级分类的默认映射
         first_level = category_path.split('.')[0] if '.' in category_path else category_path
         if first_level in self.DEFAULT_MAPPING:
             return self.DEFAULT_MAPPING[first_level].copy()
         
-        # 兜底映射
+        # 兜底映射到债券类
         return {"equity": 0.0, "commodity": 0.0, "cash": 0.0, "bond": 1.0}
     
     def analyze_user_allocation(self, assets: List[Asset], phase: str = "recovery") -> Dict:
@@ -100,6 +178,9 @@ class MerrillAllocationMapper:
         
         # 对每个资产进行映射计算
         for asset in assets:
+            if not asset.primary_category_id:
+                continue
+                
             category_path = self._get_category_full_path(asset.primary_category_id)
             weights = self._get_mapping_weights(category_path, phase)
             
