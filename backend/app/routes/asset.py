@@ -5,7 +5,7 @@ from typing import List, Optional
 from app.database import get_db
 from app.models import Asset, AssetCategory, User, AssetHistory
 from app.auth import get_current_user
-from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse, AssetSummary,AllocationAnalysis
+from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse, AssetSummary,AllocationAnalysis,AssetCreateList
 from datetime import datetime, timedelta,timezone
 import random
 from app.utils.merrill_mapper import MerrillAllocationMapper
@@ -441,7 +441,8 @@ async def get_trend_sql_optimized(db, current_user, from_date):
             UNION ALL
             SELECT date(date, '+1 day')
             FROM date_series
-            WHERE date < date('now', '+7 days')
+            -- WHERE date < date('now', '+7 days')
+            WHERE date < date('now')
         ),
         -- 获取每个资产在每个日期的有效金额
         daily_asset_values AS (
@@ -617,3 +618,117 @@ async def get_asset_history(
         }
         for record in history_records
     ]
+
+@router.post("/batch", response_model=List[AssetResponse], status_code=status.HTTP_201_CREATED)
+async def create_assets_batch(
+    asset_list: AssetCreateList,
+    test_date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """批量创建资产 - 优化版本"""
+    from sqlalchemy.orm import joinedload
+    
+    if not asset_list.assets:
+        return []
+    
+    # 1. 批量验证所有分类代码
+    category_codes = {asset.category_code for asset in asset_list.assets}
+    categories = db.query(AssetCategory).filter(AssetCategory.code.in_(category_codes)).all()
+    category_map = {cat.code: cat for cat in categories}
+    
+    # 检查是否有无效的分类代码
+    invalid_categories = category_codes - set(category_map.keys())
+    if invalid_categories:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "INVALID_CATEGORY", "message": f"无效的资产分类: {', '.join(invalid_categories)}"}
+        )
+    
+    # 2. 批量创建资产
+    assets_to_create = []
+    created_at = None
+    
+    # 处理测试日期
+    if test_date:
+        try:
+            created_at = datetime.strptime(test_date, "%Y-%m-%d").replace(
+                hour=10, minute=0, second=0, tzinfo=timezone.utc
+            )
+        except ValueError:
+            created_at = None
+    
+    for asset_data in asset_list.assets:
+        category = category_map[asset_data.category_code]
+        
+        asset = Asset(
+            name=asset_data.name,
+            amount=asset_data.amount,
+            description=asset_data.description,
+            owner_id=current_user.id,
+            primary_category_id=category.id
+        )
+        
+        # 如果指定了测试日期，手动设置创建时间
+        if created_at:
+            asset.created_at = created_at
+            asset.updated_at = created_at
+        
+        assets_to_create.append(asset)
+    
+    # 一次性添加所有资产
+    db.add_all(assets_to_create)
+    db.commit()
+    
+    # 刷新获取所有资产的ID
+    for asset in assets_to_create:
+        db.refresh(asset)
+    
+    # 3. 批量创建历史记录
+    histories_to_create = []
+    for asset in assets_to_create:
+        history = AssetHistory(
+            asset_id=asset.id,
+            amount=asset.amount,
+            effective_date=asset.created_at,
+            change_type='create'
+        )
+        histories_to_create.append(history)
+    
+    db.add_all(histories_to_create)
+    db.commit()
+    
+    # 4. 批量加载关联关系
+    asset_ids = [asset.id for asset in assets_to_create]
+    assets_with_relations = db.query(Asset).options(
+        joinedload(Asset.primary_category),
+        joinedload(Asset.history_records)
+    ).filter(Asset.id.in_(asset_ids)).all()
+    
+    # 构建响应数据
+    created_assets = []
+    for asset in assets_with_relations:
+        asset_response = {
+            "id": asset.id,
+            "name": asset.name,
+            "amount": asset.amount,
+            "description": asset.description,
+            "created_at": asset.created_at,
+            "updated_at": asset.updated_at,
+            "owner_id": asset.owner_id,
+            "category_code": asset.primary_category.code,
+            "category_name": asset.primary_category.name,
+            "history_records": [
+                {
+                    "id": history.id,
+                    "asset_id": history.asset_id,
+                    "amount": history.amount,
+                    "effective_date": history.effective_date,
+                    "change_type": history.change_type
+                }
+                for history in asset.history_records
+            ] if asset.history_records else []
+        }
+        created_assets.append(asset_response)
+    
+    return created_assets

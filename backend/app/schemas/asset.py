@@ -92,3 +92,26 @@ class AllocationAnalysis(BaseModel):
 
     class Config:
         from_attributes = True
+
+class AssetCreateList(BaseModel):
+    assets: List[AssetCreate] = Field(..., min_items=1, max_items=100)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "assets": [
+                    {
+                        "name": "资产1",
+                        "category_code": "equity.stock",
+                        "amount": 10000.0,
+                        "description": "描述1"
+                    },
+                    {
+                        "name": "资产2", 
+                        "category_code": "cash.deposit",
+                        "amount": 50000.0,
+                        "description": "描述2"
+                    }
+                ]
+            }
+        }
