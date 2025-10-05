@@ -23,6 +23,17 @@ class AssetCreate(AssetBase):
             }
         }
 
+# 资产历史记录响应
+class AssetHistoryResponse(BaseModel):
+    id: int
+    asset_id: int
+    amount: float
+    effective_date: datetime
+    change_type: str
+    
+    class Config:
+        from_attributes = True
+
 # 资产响应
 class AssetResponse(AssetBase):
     id: int
@@ -33,6 +44,9 @@ class AssetResponse(AssetBase):
     
     # 分类详细信息
     category: Optional[dict] = None
+
+    # 添加历史记录
+    history_records: Optional[List[AssetHistoryResponse]] = None
     
     class Config:
         from_attributes = True

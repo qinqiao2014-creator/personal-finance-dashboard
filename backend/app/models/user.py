@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime ,Enum
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime,timezone
 from app.database import Base
 import enum
 
@@ -17,8 +17,8 @@ class User(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
     role = Column(Enum(UserRole), nullable=False)
     
     assets = relationship("Asset", back_populates="owner", cascade="all, delete-orphan")

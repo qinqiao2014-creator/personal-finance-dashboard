@@ -10,7 +10,7 @@ from .user import (
 
 from .asset import (
     AssetBase, AssetCreate, AssetResponse, 
-    AssetUpdate, AssetSummary, AssetListResponse 
+    AssetUpdate, AssetSummary, AssetListResponse ,AssetHistoryResponse
 )
 
 __all__ = [
@@ -20,5 +20,5 @@ __all__ = [
     
     # Asset schemas
     'AssetBase', 'AssetCreate', 'AssetResponse', 
-    'AssetUpdate', 'AssetSummary', 'AssetListResponse' 
+    'AssetUpdate', 'AssetSummary', 'AssetListResponse' ,"AssetHistoryResponse"
 ]

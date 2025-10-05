@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func,text
 from typing import List, Optional
 from app.database import get_db
-from app.models import Asset, AssetCategory, User
+from app.models import Asset, AssetCategory, User, AssetHistory
 from app.auth import get_current_user
 from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse, AssetSummary,AllocationAnalysis
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
 import random
 from app.utils.merrill_mapper import MerrillAllocationMapper
 
@@ -24,7 +24,13 @@ async def get_assets(
     current_user: User = Depends(get_current_user)
 ) -> AssetListResponse:
     """获取当前用户的资产列表"""
-    query = db.query(Asset).filter(Asset.owner_id == current_user.id)
+    # 使用 joinedload 加载关联关系
+    from sqlalchemy.orm import joinedload
+    
+    query = db.query(Asset).options(
+        joinedload(Asset.primary_category),
+        joinedload(Asset.history_records)  # 加载历史记录
+    ).filter(Asset.owner_id == current_user.id)
     
     if category_code:
         query = query.join(Asset.primary_category).filter(AssetCategory.code == category_code)
@@ -32,7 +38,7 @@ async def get_assets(
     total = query.count()
     assets = query.order_by(Asset.created_at.desc()).offset(skip).limit(limit).all()
     
-    # 构建包含分类信息的响应
+    # 构建包含分类信息和历史记录的响应
     response_assets = []
     for asset in assets:
         asset_data = {
@@ -42,7 +48,17 @@ async def get_assets(
             "description": asset.description,
             "created_at": asset.created_at,
             "updated_at": asset.updated_at,
-            "owner_id": asset.owner_id
+            "owner_id": asset.owner_id,
+            "history_records": [
+                {
+                    "id": history.id,
+                    "asset_id": history.asset_id,
+                    "amount": history.amount,
+                    "effective_date": history.effective_date,
+                    "change_type": history.change_type
+                }
+                for history in asset.history_records
+            ] if asset.history_records else []
         }
         
         if asset.primary_category:
@@ -65,7 +81,12 @@ async def get_asset(
     current_user: User = Depends(get_current_user)
 ):
     """根据ID获取特定资产详情"""
-    asset = db.query(Asset).filter(
+    from sqlalchemy.orm import joinedload
+    
+    asset = db.query(Asset).options(
+        joinedload(Asset.primary_category),
+        joinedload(Asset.history_records)  # 加载历史记录
+    ).filter(
         Asset.id == asset_id, 
         Asset.owner_id == current_user.id
     ).first()
@@ -83,7 +104,17 @@ async def get_asset(
         "description": asset.description,
         "created_at": asset.created_at,
         "updated_at": asset.updated_at,
-        "owner_id": asset.owner_id
+        "owner_id": asset.owner_id,
+        "history_records": [
+            {
+                "id": history.id,
+                "asset_id": history.asset_id,
+                "amount": history.amount,
+                "effective_date": history.effective_date,
+                "change_type": history.change_type
+            }
+            for history in asset.history_records
+        ] if asset.history_records else []
     }
     
     if asset.primary_category:
@@ -97,13 +128,18 @@ async def get_asset(
     
     return asset_data
 
+# 在创建资产时也添加历史记录调试
 @router.post("", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
-async def create_asset(
+async def create_asset(    
     asset_data: AssetCreate,
+    test_date: Optional[str] = None,  # 隐藏参数，不暴露在文档中
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    
     """创建新资产"""
+    from sqlalchemy.orm import joinedload
+    
     # 验证分类代码是否存在
     category = db.query(AssetCategory).filter(AssetCategory.code == asset_data.category_code).first()
     if not category:
@@ -112,20 +148,66 @@ async def create_asset(
             detail={"error": "INVALID_CATEGORY", "message": f"无效的资产分类: {asset_data.category_code}"}
         )
     
-    # 创建资产并绑定分类
-    asset = Asset(
-        name=asset_data.name,
-        amount=asset_data.amount,
-        description=asset_data.description,
-        owner_id=current_user.id,
-        primary_category_id=category.id  # 正确绑定分类ID
-    )
+
+        # 只有在有test_date时才手动设置日期
+    # 创建资产 - 根据是否有test_date决定是否手动设置日期
+    if test_date:
+        try:
+            created_at = datetime.strptime(test_date, "%Y-%m-%d").replace(
+                hour=10, minute=0, second=0, tzinfo=timezone.utc
+            )
+            # 有test_date时手动设置日期
+            asset = Asset(
+                name=asset_data.name,
+                amount=asset_data.amount,
+                description=asset_data.description,
+                owner_id=current_user.id,
+                primary_category_id=category.id,
+                created_at=created_at,
+                updated_at=created_at
+            )
+        except ValueError:
+            # 日期格式错误，回退到自动生成
+            asset = Asset(
+                name=asset_data.name,
+                amount=asset_data.amount,
+                description=asset_data.description,
+                owner_id=current_user.id,
+                primary_category_id=category.id
+            )
+    else:
+        # 没有test_date时，使用模型默认值
+        asset = Asset(
+            name=asset_data.name,
+            amount=asset_data.amount,
+            description=asset_data.description,
+            owner_id=current_user.id,
+            primary_category_id=category.id
+        )
+    
     
     db.add(asset)
     db.commit()
     db.refresh(asset)
     
-    # 返回包含分类信息的响应
+    # 创建资产历史记录
+    print(f"📝 创建资产初始历史记录: {asset.amount}")
+    history = AssetHistory(
+        asset_id=asset.id,
+        amount=asset.amount,
+        effective_date=asset.created_at,
+        change_type='create'
+    )
+    db.add(history)
+    db.commit()
+    
+    # 重新加载关联关系
+    asset = db.query(Asset).options(
+        joinedload(Asset.primary_category),
+        joinedload(Asset.history_records)
+    ).filter(Asset.id == asset.id).first()
+    
+    # 返回包含分类信息和历史记录的响应
     return {
         "id": asset.id,
         "name": asset.name,
@@ -135,18 +217,35 @@ async def create_asset(
         "updated_at": asset.updated_at,
         "owner_id": asset.owner_id,
         "category_code": category.code,
-        "category_name": category.name
+        "category_name": category.name,
+        "history_records": [
+            {
+                "id": history.id,
+                "asset_id": history.asset_id,
+                "amount": history.amount,
+                "effective_date": history.effective_date,
+                "change_type": history.change_type
+            }
+            for history in asset.history_records
+        ] if asset.history_records else []
     }
+
 
 @router.put("/{asset_id}", response_model=AssetResponse)
 async def update_asset(
     asset_id: int,
     asset_data: AssetUpdate,
+    test_date: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """更新资产信息"""
-    asset = db.query(Asset).filter(
+    from sqlalchemy.orm import joinedload
+    
+    asset = db.query(Asset).options(
+        joinedload(Asset.primary_category),
+        joinedload(Asset.history_records)
+    ).filter(
         Asset.id == asset_id, 
         Asset.owner_id == current_user.id
     ).first()
@@ -156,6 +255,22 @@ async def update_asset(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="资产不存在"
         )
+    
+    # 记录旧金额用于历史记录
+    old_amount = asset.amount
+
+
+     # 处理测试日期
+    if test_date:
+        try:
+            updated_at = datetime.strptime(test_date, "%Y-%m-%d").replace(
+                hour=10, minute=0, second=0, tzinfo=timezone.utc
+            )
+            # 有test_date时手动设置updated_at
+            asset.updated_at = updated_at
+        except ValueError:
+            # 日期格式错误，让模型自动更新
+            pass
     
     # 如果更新了分类，需要验证新的分类代码
     if asset_data.category_code and asset_data.category_code != (asset.primary_category.code if asset.primary_category else None):
@@ -173,10 +288,32 @@ async def update_asset(
         if field != "category_code":  # 分类已单独处理
             setattr(asset, field, value)
     
+    # 如果金额发生变化，记录历史
+    if 'amount' in update_data and update_data['amount'] != old_amount:
+        print(f"💰 记录资产历史: {old_amount} -> {update_data['amount']}")
+
+        # 确定历史记录的时间
+        effective_date = asset.updated_at if test_date else datetime.now(timezone.utc)
+
+        history = AssetHistory(
+            asset_id=asset.id,
+            amount=update_data['amount'],
+            effective_date=effective_date , # 使用正确的时间
+            change_type='update'
+        )
+        db.add(history)
+        # 立即提交历史记录
+        db.commit()
+        print("✅ 历史记录已创建")
+    
+    # 提交资产更新
     db.commit()
     db.refresh(asset)
     
-    # 返回包含分类信息的响应
+    # 重新加载关联关系
+    db.refresh(asset, ['primary_category', 'history_records'])
+    
+    # 构建响应数据
     asset_data = {
         "id": asset.id,
         "name": asset.name,
@@ -184,7 +321,17 @@ async def update_asset(
         "description": asset.description,
         "created_at": asset.created_at,
         "updated_at": asset.updated_at,
-        "owner_id": asset.owner_id
+        "owner_id": asset.owner_id,
+        "history_records": [
+            {
+                "id": history.id,
+                "asset_id": history.asset_id,
+                "amount": history.amount,
+                "effective_date": history.effective_date,
+                "change_type": history.change_type
+            }
+            for history in asset.history_records
+        ] if asset.history_records else []
     }
     
     if asset.primary_category:
@@ -286,24 +433,35 @@ async def get_asset_trend(
             return await get_trend_fallback(db, current_user, from_date, days)
 
 async def get_trend_sql_optimized(db, current_user, from_date):
-    """SQL优化版本 - 首选方案"""
+    """基于资产历史记录的精确趋势计算"""
+    
     cumulative_query = text("""
         WITH RECURSIVE date_series(date) AS (
             SELECT date(:start_date)
             UNION ALL
             SELECT date(date, '+1 day')
             FROM date_series
-            WHERE date < date('now')
+            WHERE date < date('now', '+7 days')
+        ),
+        -- 获取每个资产在每个日期的有效金额
+        daily_asset_values AS (
+            SELECT 
+                ds.date,
+                ah.asset_id,
+                ah.amount,
+                ROW_NUMBER() OVER (PARTITION BY ds.date, ah.asset_id ORDER BY ah.effective_date DESC) as rn
+            FROM date_series ds
+            CROSS JOIN asset_histories ah
+            INNER JOIN assets a ON ah.asset_id = a.id
+            WHERE a.owner_id = :user_id
+            AND date(ah.effective_date) <= ds.date
         )
         SELECT 
             ds.date,
-            COALESCE((
-                SELECT SUM(amount) 
-                FROM assets 
-                WHERE owner_id = :user_id 
-                AND date(created_at) <= ds.date
-            ), 0) as cumulative_value
+            COALESCE(SUM(dav.amount), 0) as cumulative_value
         FROM date_series ds
+        LEFT JOIN daily_asset_values dav ON ds.date = dav.date AND dav.rn = 1
+        GROUP BY ds.date
         ORDER BY ds.date
     """)
     
@@ -314,7 +472,7 @@ async def get_trend_sql_optimized(db, current_user, from_date):
     
     trend_data = [{"date": str(row.date), "value": float(row.cumulative_value)} for row in result]
     
-    print(f"📊 SQL优化生成 {len(trend_data)} 个数据点")
+    print(f"📊 基于历史记录生成 {len(trend_data)} 个数据点")
     if trend_data:
         print(f"📈 金额范围: {trend_data[0]['value']} -> {trend_data[-1]['value']}")
     
@@ -424,3 +582,38 @@ async def get_allocation_analysis(
             status_code=500, 
             detail=f"资产配置分析失败: {str(e)}"
         )
+    
+@router.get("/{asset_id}/history", response_model=List[dict])
+async def get_asset_history(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取资产的历史记录"""
+    # 验证资产所有权
+    asset = db.query(Asset).filter(
+        Asset.id == asset_id, 
+        Asset.owner_id == current_user.id
+    ).first()
+    
+    if not asset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="资产不存在"
+        )
+    
+    # 查询历史记录
+    history_records = db.query(AssetHistory).filter(
+        AssetHistory.asset_id == asset_id
+    ).order_by(AssetHistory.effective_date.desc()).all()
+    
+    return [
+        {
+            "id": record.id,
+            "asset_id": record.asset_id,
+            "amount": record.amount,
+            "effective_date": record.effective_date,
+            "change_type": record.change_type
+        }
+        for record in history_records
+    ]

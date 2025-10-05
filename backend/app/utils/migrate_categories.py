@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 资产分类数据迁移工具 - 最终优化版本
 """
@@ -403,3 +402,5 @@ if __name__ == "__main__":
 
 # # 实际执行
 # python app/utils/migrate_categories.py --execute
+
+# 如果未来数据继续变化 改成 init_data3.py即可
