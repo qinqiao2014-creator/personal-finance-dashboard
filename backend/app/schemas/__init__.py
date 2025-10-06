@@ -13,6 +13,8 @@ from .asset import (
     AssetUpdate, AssetSummary, AssetListResponse ,AssetHistoryResponse,AssetCreateList
 )
 
+from .diagnosis_report import (DiagnosisReportResponse,DiagnosisReportList,DiagnosisReportCreate)
+
 __all__ = [
     # User schemas
     'UserBase', 'UserCreate', 'UserLogin', 'UserResponse',
@@ -20,5 +22,8 @@ __all__ = [
     
     # Asset schemas
     'AssetBase', 'AssetCreate', 'AssetResponse', 
-    'AssetUpdate', 'AssetSummary', 'AssetListResponse' ,"AssetHistoryResponse","AssetCreateList"
+    'AssetUpdate', 'AssetSummary', 'AssetListResponse' ,"AssetHistoryResponse","AssetCreateList",
+
+    # diagnosis_report
+    "DiagnosisReportResponse","DiagnosisReportList","DiagnosisReportCreate"
 ]

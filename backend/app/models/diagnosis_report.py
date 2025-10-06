@@ -16,15 +16,16 @@ class DiagnosisReport(Base):
     economic_phase = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "title": self.title,
-            "health_score": self.health_score,
-            "total_amount": self.total_amount,
-            "user_allocation": self.user_allocation,
-            "merrill_suggestion": self.merrill_suggestion,
-            "adjustment_advice": self.adjustment_advice,
-            "economic_phase": self.economic_phase,
-            "created_at": self.created_at.isoformat() if self.created_at else None
-        }
+    # 如果不是FastAPI + Pydantic 的 from_attributes=True 这个框架，就需要手动to_dict
+    # def to_dict(self):
+    #     return {
+    #         "id": self.id,
+    #         "title": self.title,
+    #         "health_score": self.health_score,
+    #         "total_amount": self.total_amount,
+    #         "user_allocation": self.user_allocation,
+    #         "merrill_suggestion": self.merrill_suggestion,
+    #         "adjustment_advice": self.adjustment_advice,
+    #         "economic_phase": self.economic_phase,
+    #         "created_at": self.created_at.isoformat() if self.created_at else None
+        # }

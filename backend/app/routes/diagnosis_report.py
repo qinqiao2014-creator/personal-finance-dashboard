@@ -4,10 +4,11 @@ from app.database import get_db
 from app.models.diagnosis_report import DiagnosisReport
 from app.models.user import User
 from app.auth.auth import get_current_user
+from app.schemas.diagnosis_report import DiagnosisReportResponse,DiagnosisReportList,DiagnosisReportCreate
 
 router = APIRouter(prefix="/reports", tags=["诊断报告"])
 
-@router.get("")
+@router.get("", response_model=DiagnosisReportList)
 async def get_user_reports(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -18,7 +19,7 @@ async def get_user_reports(
     ).order_by(DiagnosisReport.created_at.desc()).all()
     
     return {
-        "reports": [report.to_dict() for report in reports]
+        "reports": [report for report in reports]
     }
 
 @router.get("/{report_id}")
@@ -36,11 +37,11 @@ async def get_report_detail(
     if not report:
         raise HTTPException(status_code=404, detail="报告不存在")
     
-    return report.to_dict()
+    return report
 
-@router.post("")
+@router.post("", response_model=DiagnosisReportResponse)
 async def save_diagnosis_report(
-    report_data: dict,
+    report_data: DiagnosisReportCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -51,19 +52,19 @@ async def save_diagnosis_report(
     report = DiagnosisReport(
         user_id=current_user.id,
         title=title,
-        health_score=report_data["health_score"],
-        total_amount=report_data["total_amount"],
-        user_allocation=report_data["user_allocation"],
-        merrill_suggestion=report_data["merrill_suggestion"],
-        adjustment_advice=report_data["adjustment_advice"],
-        economic_phase=report_data.get("economic_phase", "recovery")
+        health_score=report_data.health_score,  # ✅ 正确的属性访问
+        total_amount=report_data.total_amount,
+        user_allocation=report_data.user_allocation,
+        merrill_suggestion=report_data.merrill_suggestion,
+        adjustment_advice=[advice for advice in report_data.adjustment_advice],
+        economic_phase=report_data.economic_phase
     )
     
     db.add(report)
     db.commit()
     db.refresh(report)
     
-    return {"id": report.id, "title": title, "message": "报告保存成功"}
+    return report
 
 @router.delete("/{report_id}")
 async def delete_report(
