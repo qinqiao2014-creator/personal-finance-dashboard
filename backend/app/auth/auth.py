@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 import logging
@@ -57,29 +58,57 @@ async def register_user(user: user_schemas.UserCreate, db: Session = Depends(get
 @router.post("/login", response_model=user_schemas.UserLoginResponse)
 async def login_user(user: user_schemas.UserLogin, db: Session = Depends(get_db)):
     """
-    用户登录接口
+    用户登录接口 - 支持用户名或邮箱登录
     """
     try:
-        # 1. 查找用户
-        db_user = db.query(User).filter(User.username == user.username).first()
+        # 添加详细的调试信息
+        print(f"=== 登录调试信息 ===")
+        print(f"请求数据 - username: '{user.username}', email: '{user.email}'")
+        print(f"邮箱长度: {len(user.email) if user.email else 'None'}")
+        print(f"邮箱类型: {type(user.email)}")
+        # 1. 根据用户名或邮箱查找用户
+        if user.username:
+            # 使用用户名登录
+            db_user = db.query(User).filter(User.username == user.username).first()
+            login_type = "用户名"
+            identifier = user.username
+            print(f"使用用户名查找: '{user.username}'")
+        else:
+            # 使用邮箱登录
+            db_user = db.query(User).filter(User.email == user.email).first()
+            login_type = "邮箱"
+            identifier = user.email
+            print(f"使用邮箱查找: '{user.email}'")
         
+         # 打印查询结果和所有用户对比
+        if db_user:
+            print(f"✅ 找到用户: ID={db_user.id}, 用户名='{db_user.username}', 邮箱='{db_user.email}'")
+        else:
+            print(f"❌ 未找到用户")
+            # 打印数据库中所有用户用于对比
+            all_users = db.query(User).all()
+            print("📋 数据库中的所有用户:")
+            for u in all_users:
+                print(f"  - 用户名: '{u.username}', 邮箱: '{u.email}'")
+
+
         if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="用户名或密码错误"
+                detail=f"{login_type} {identifier} 不存在"
             )
         
         # 2. 验证密码
         if not verify_password(user.password, db_user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="用户名或密码错误"
+                detail="密码错误"
             )
         
         # 3. 生成JWT令牌
         access_token = create_access_token(data={"sub": str(db_user.id)})
         
-        # 4. 返回令牌
+        # 4. 返回令牌和用户信息
         userloginresponse = user_schemas.UserLoginResponse(
             access_token=access_token,
             token_type="bearer",
@@ -91,6 +120,7 @@ async def login_user(user: user_schemas.UserLogin, db: Session = Depends(get_db)
             )
         )
 
+        logger.info(f"用户登录成功: {db_user.username} (ID: {db_user.id})")
         return userloginresponse
         
     except HTTPException:
@@ -106,11 +136,17 @@ async def login_user(user: user_schemas.UserLogin, db: Session = Depends(get_db)
 async def login_for_swagger(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     专门为Swagger UI的Authorize按钮提供的登录端点
+    注意：Swagger的OAuth2表单只支持用户名，不支持双通道登录
     """
+    # 尝试用用户名查找用户
     db_user = db.query(User).filter(User.username == form_data.username).first()
     
+    # 如果用户名没找到，尝试用邮箱查找（扩展Swagger支持）
+    if not db_user:
+        db_user = db.query(User).filter(User.email == form_data.username).first()
+    
     if not db_user or not verify_password(form_data.password, db_user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名/邮箱或密码错误")
     
     access_token = create_access_token(data={"sub": str(db_user.id)})
     

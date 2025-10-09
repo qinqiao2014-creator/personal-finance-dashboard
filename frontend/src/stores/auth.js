@@ -10,12 +10,6 @@ export const useAuthStore = defineStore("auth", () => {
   // 🔄 新增：统一的认证设置方法
   const setAuth = (userData, authToken) => {
     user.value = userData;
-    // user.value = {
-    //   id: userData.user_id, // 统一为id而不是user_id
-    //   username: userData.username,
-    //   email: userData.email,
-    //   role: userData.role,
-    // };
     token.value = authToken;
     isAuthenticated.value = true;
     localStorage.setItem("token", authToken);
@@ -36,18 +30,33 @@ export const useAuthStore = defineStore("auth", () => {
     delete api.defaults.headers.common["Authorization"];
   };
 
-  // 🔄 更新：使用新的setAuth方法
-  const login = async (username, password) => {
+  // 🔄 判断登录类型（用户名或邮箱）
+  const determineLoginType = (identifier) => {
+    // 简单的邮箱验证正则
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(identifier) ? "email" : "username";
+  };
+
+  // 🔄 新增：双通道登录方法
+  const loginDual = async (identifier, password) => {
     try {
-      const response = await api.post("/auth/login", {
-        username: username,
+      const loginType = determineLoginType(identifier);
+      const requestData = {
         password: password,
-      });
+      };
+
+      // 根据类型设置对应的字段
+      if (loginType === "email") {
+        requestData.email = identifier;
+      } else {
+        requestData.username = identifier;
+      }
+
+      console.log(`🔐 ${loginType}登录请求:`, requestData);
+
+      const response = await api.post("/auth/login", requestData);
 
       const { access_token, user: userData } = response.data;
-      // console.log("后端原样返回：", response.data);
-      // console.log("access_token数据:", access_token);
-      // console.log("user数据:", user);
       setAuth(userData, access_token); // 使用统一的设置方法
 
       return response.data;
@@ -55,6 +64,11 @@ export const useAuthStore = defineStore("auth", () => {
       clearAuth(); // 登录失败时清除认证状态
       throw error; // 重新抛出错误供页面处理
     }
+  };
+
+  // 🔄 保留原有登录方法（向后兼容）
+  const login = async (username, password) => {
+    return loginDual(username, password);
   };
 
   // 🔄 更新：使用新的clearAuth方法
@@ -91,7 +105,8 @@ export const useAuthStore = defineStore("auth", () => {
     user,
     token,
     isAuthenticated,
-    login,
+    login, // 原有登录方法（向后兼容）
+    loginDual, // 🔄 新增：双通道登录方法
     logout,
     checkAuth, // 🔄 新增：供路由守卫使用
     setAuth, // 🔄 新增：统一设置方法

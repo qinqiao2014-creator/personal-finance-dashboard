@@ -9,8 +9,8 @@
       </template>
 
       <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules" @submit.prevent="handleLogin">
-        <el-form-item prop="username">
-          <el-input v-model="loginForm.username" placeholder="请输入用户名" size="large" :prefix-icon="User" :disabled="loading" />
+        <el-form-item prop="identifier">
+          <el-input v-model="loginForm.identifier" placeholder="请输入用户名或邮箱" size="large" :prefix-icon="User" :disabled="loading" />
         </el-form-item>
 
         <el-form-item prop="password">
@@ -44,18 +44,18 @@ const loading = ref(false);
 const loginFormRef = ref();
 
 const loginForm = reactive({
-  username: "",
+  identifier: "",  // 改为统一的标识符字段
   password: "",
 });
 
 // 表单验证规则
 const loginRules = {
-  username: [
-    { required: true, message: "请输入用户名", trigger: "blur" },
+  identifier: [
+    { required: true, message: "请输入用户名或邮箱", trigger: "blur" },
     {
       min: 3,
-      max: 20,
-      message: "用户名长度在 3 到 20 个字符",
+      max: 50,
+      message: "用户名或邮箱长度在 3 到 50 个字符",
       trigger: "blur",
     },
   ],
@@ -63,6 +63,13 @@ const loginRules = {
     { required: true, message: "请输入密码", trigger: "blur" },
     { min: 6, message: "密码长度至少 6 个字符", trigger: "blur" },
   ],
+};
+
+// 判断是用户名还是邮箱
+const determineLoginType = (identifier) => {
+  // 简单的邮箱验证正则
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(identifier) ? 'email' : 'username';
 };
 
 const handleLogin = async () => {
@@ -75,13 +82,13 @@ const handleLogin = async () => {
   loading.value = true;
 
   try {
-    await authStore.login(loginForm.username, loginForm.password);
+    // 使用新的登录方法，支持双通道
+    await authStore.loginDual(loginForm.identifier, loginForm.password);
 
     ElMessage.success("登录成功！");
     router.push("/dashboard");
   } catch (error) {
-    const errorMessage =
-      error.response?.data?.detail || "登录失败，请检查用户名和密码";
+    const errorMessage = error.response?.data?.detail || "登录失败，请检查用户名/邮箱和密码";
     ElMessage.error(errorMessage);
   } finally {
     loading.value = false;

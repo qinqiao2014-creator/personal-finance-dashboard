@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import Optional
 from datetime import datetime
 from enum import Enum
@@ -30,16 +30,42 @@ class UserCreate(UserBase):
 
 # 登录请求
 class UserLogin(BaseModel):
-    username: str = Field(..., example="john_doe")
+    username:  Optional[str]  = Field(None, example="john_doe")
+    email: Optional[str] = Field(None, example="john@example.com")
     password: str = Field(..., example="securepassword123")
+
+
+    @model_validator(mode='before')
+    def validate_login_identifier(cls, values):
+        # 在 Pydantic V2 中，values 是原始输入数据
+        if isinstance(values, dict):
+            username = values.get('username')
+            email = values.get('email')
+            password = values.get('password')
+            
+            # 检查密码是否提供
+            if not password:
+                raise ValueError('密码是必填项')
+            
+            # 检查至少提供一个登录标识符
+            if not username and not email:
+                raise ValueError('必须提供用户名或邮箱')
+            
+            # 检查不能同时提供用户名和邮箱
+            if username and email:
+                raise ValueError('只能提供用户名或邮箱其中之一')
+        
+        return values
 
     class Config:
         json_schema_extra = {
             "example": {
                 "username": "john_doe",
+                "email":"john_doe@email.com",
                 "password": "securepassword123"
             }
         }
+
 
 # 用户响应（返回给前端的数据）
 class UserResponse(UserBase):
